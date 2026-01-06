@@ -3,16 +3,17 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Image, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Send, X } from 'lucide-react-native';
 import Video from 'react-native-video';
-import { Video as VideoType } from '../types';
+import { Video as VideoType, User } from '../types';
 
 const { width, height } = Dimensions.get('window');
 
 interface VideoItemProps {
   video: VideoType;
   isActive: boolean;
+  onViewProfile?: (user: User) => void; // Callback khi tap vào avatar
 }
 
-const VideoItem: React.FC<VideoItemProps> = ({ video, isActive }) => {
+const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -50,15 +51,35 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive }) => {
       
       <View style={styles.overlay} pointerEvents="box-none">
         <View style={styles.rightActions}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={() => {
+              if (onViewProfile) {
+                // Create a User object from video owner info
+                const videoOwner: User = {
+                  uid: video.ownerUid,
+                  username: video.ownerName,
+                  email: '',
+                  avatarUrl: video.ownerAvatar,
+                  bio: '',
+                  followersCount: 0,
+                  followingCount: 0
+                };
+                onViewProfile(videoOwner);
+              }
+            }}
+          >
             <Image source={{ uri: video.ownerAvatar }} style={styles.avatar} />
             <TouchableOpacity 
-              onPress={() => setIsFollowing(true)}
+              onPress={(e) => {
+                e.stopPropagation();
+                setIsFollowing(true);
+              }}
               style={[styles.followButton, isFollowing && { backgroundColor: '#fff' }]}
             >
               <Plus size={12} color={isFollowing ? "#fe2c55" : "#fff"} strokeWidth={4} />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.action} onPress={() => setIsLiked(!isLiked)}>
             <Heart size={32} color={isLiked ? "#fe2c55" : "#fff"} fill={isLiked ? "#fe2c55" : "none"} />

@@ -1,0 +1,11 @@
+// Override for react-native-video to exclude old support libraries
+configurations.all {
+    exclude group: 'com.android.support', module: 'appcompat-v7'
+    exclude group: 'com.android.support', module: 'support-v4'
+    exclude group: 'com.github.adityaxjha', module: 'Android-ScalableVideoView'
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core:1.12.0'
+}
