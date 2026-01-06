@@ -22,9 +22,12 @@
     "react": "19.2.0",
     "react-native": "0.83.1",
     "react-native-fbsdk-next": "^13.4.1",
+    "react-native-image-picker": "^8.2.1",
+    "react-native-permissions": "^5.4.4",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-svg": "^15.15.1",
-    "react-native-video": "^6.18.0"
+    "react-native-video": "^6.18.0",
+    "react-native-vision-camera": "^4.7.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
