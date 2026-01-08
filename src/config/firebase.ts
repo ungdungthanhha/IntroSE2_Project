@@ -1,16 +1,8 @@
-import { firebase as authFirebase } from '@react-native-firebase/auth';
-import { firebase as firestoreFirebase } from '@react-native-firebase/firestore';
-import { firebase as storageFirebase } from '@react-native-firebase/storage';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
-// Get Firebase instances using modular API
-export const getAuth = () => authFirebase.auth();
-export const getFirestore = () => firestoreFirebase.firestore();
-export const getStorage = () => storageFirebase.storage();
-
-// For backward compatibility
-export const firebaseAuth = getAuth;
-export const db = getFirestore;
-export const firebaseStorage = getStorage;
+export const firebaseAuth = auth(); 
+export const db = firestore();
 
 export const COLLECTIONS = {
   USERS: 'users',

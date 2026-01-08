@@ -3,6 +3,7 @@ export interface User {
   uid: string;
   username: string;
   email: string;
+  birthday: string;
   avatarUrl: string;
   bio: string;
   followersCount: number;
@@ -49,7 +50,31 @@ export interface Chat {
   timestamp: number;
   otherUser: Partial<User>;
 }
+// ...existing code...
 
+export interface Livestream {
+  id: string;
+  hostId: string;
+  hostName: string;
+  hostAvatar: string;
+  title: string;
+  viewerCount: number;
+  likesCount: number;
+  isLive: boolean;
+  createdAt: string;
+}
+
+export interface LiveComment {
+  id: string;
+  livestreamId: string;
+  userId: string;
+  username: string;
+  avatarUrl: string;
+  text: string;
+  timestamp: number;
+}
+
+// ...existing code...
 export enum AppTab {
   HOME = 'home',
   DISCOVER = 'discover',

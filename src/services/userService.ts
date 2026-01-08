@@ -1,12 +1,14 @@
-import { db, COLLECTIONS } from '../config/firebase';
+import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types';
 
+
 /**
- * Get user by ID
+ * Lấy thông tin người dùng bằng ID
  */
 export const getUserById = async (userId: string): Promise<User | null> => {
   try {
-    const userDoc = await db().collection(COLLECTIONS.USERS).doc(userId).get();
+    // Sửa lỗi: Sử dụng db.collection thay vì db()
+    const userDoc = await db.collection(COLLECTIONS.USERS).doc(userId).get();
     if (userDoc.exists()) {
       return userDoc.data() as User;
     }
@@ -18,11 +20,11 @@ export const getUserById = async (userId: string): Promise<User | null> => {
 };
 
 /**
- * Get user by username
+ * Lấy thông tin người dùng bằng username
  */
 export const getUserByUsername = async (username: string): Promise<User | null> => {
   try {
-    const snapshot = await db()
+    const snapshot = await db
       .collection(COLLECTIONS.USERS)
       .where('username', '==', username.toLowerCase())
       .limit(1)
@@ -39,11 +41,11 @@ export const getUserByUsername = async (username: string): Promise<User | null> 
 };
 
 /**
- * Check if user A is following user B
+ * Kiểm tra xem người dùng A có đang follow người dùng B không
  */
 export const isFollowing = async (currentUserId: string, targetUserId: string): Promise<boolean> => {
   try {
-    const followDoc = await db()
+    const followDoc = await db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
       .collection('following')
@@ -58,7 +60,7 @@ export const isFollowing = async (currentUserId: string, targetUserId: string): 
 };
 
 /**
- * Follow a user
+ * Theo dõi một người dùng (Sử dụng Firestore Batch để đảm bảo tính toàn vẹn dữ liệu)
  */
 export const followUser = async (currentUserId: string, targetUserId: string): Promise<{ success: boolean; error?: string }> => {
   try {
@@ -66,10 +68,10 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       return { success: false, error: 'Cannot follow yourself' };
     }
 
-    const batch = db().batch();
+    const batch = db.batch(); // Sửa lỗi: db.batch() thay vì db().batch()
     
-    // Add to current user's following list
-    const followingRef = db()
+    // 1. Thêm vào danh sách 'following' của người dùng hiện tại
+    const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
       .collection('following')
@@ -80,8 +82,8 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       followedAt: new Date().toISOString()
     });
 
-    // Add to target user's followers list
-    const followersRef = db()
+    // 2. Thêm vào danh sách 'followers' của người dùng mục tiêu
+    const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
       .collection('followers')
@@ -92,11 +94,10 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       followedAt: new Date().toISOString()
     });
 
-    // Update counts
-    const currentUserRef = db().collection(COLLECTIONS.USERS).doc(currentUserId);
-    const targetUserRef = db().collection(COLLECTIONS.USERS).doc(targetUserId);
+    // 3. Cập nhật số lượng Follower/Following
+    const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
+    const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    // Get current counts
     const [currentUserDoc, targetUserDoc] = await Promise.all([
       currentUserRef.get(),
       targetUserRef.get()
@@ -114,7 +115,6 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     });
 
     await batch.commit();
-    
     return { success: true };
   } catch (error: any) {
     console.error('Error following user:', error);
@@ -123,35 +123,29 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
 };
 
 /**
- * Unfollow a user
+ * Hủy theo dõi người dùng
  */
 export const unfollowUser = async (currentUserId: string, targetUserId: string): Promise<{ success: boolean; error?: string }> => {
   try {
-    const batch = db().batch();
+    const batch = db.batch();
     
-    // Remove from current user's following list
-    const followingRef = db()
+    const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
       .collection('following')
       .doc(targetUserId);
-    
     batch.delete(followingRef);
 
-    // Remove from target user's followers list
-    const followersRef = db()
+    const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
       .collection('followers')
       .doc(currentUserId);
-    
     batch.delete(followersRef);
 
-    // Update counts
-    const currentUserRef = db().collection(COLLECTIONS.USERS).doc(currentUserId);
-    const targetUserRef = db().collection(COLLECTIONS.USERS).doc(targetUserId);
+    const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
+    const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    // Get current counts
     const [currentUserDoc, targetUserDoc] = await Promise.all([
       currentUserRef.get(),
       targetUserRef.get()
@@ -169,7 +163,6 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     });
 
     await batch.commit();
-    
     return { success: true };
   } catch (error: any) {
     console.error('Error unfollowing user:', error);
@@ -178,73 +171,13 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
 };
 
 /**
- * Get followers list
- */
-export const getFollowers = async (userId: string): Promise<User[]> => {
-  try {
-    const followersSnapshot = await db()
-      .collection(COLLECTIONS.USERS)
-      .doc(userId)
-      .collection('followers')
-      .orderBy('followedAt', 'desc')
-      .limit(50)
-      .get();
-
-    const followerIds = followersSnapshot.docs.map(doc => doc.id);
-    
-    if (followerIds.length === 0) return [];
-
-    const users: User[] = [];
-    for (const followerId of followerIds) {
-      const user = await getUserById(followerId);
-      if (user) users.push(user);
-    }
-
-    return users;
-  } catch (error) {
-    console.error('Error getting followers:', error);
-    return [];
-  }
-};
-
-/**
- * Get following list
- */
-export const getFollowing = async (userId: string): Promise<User[]> => {
-  try {
-    const followingSnapshot = await db()
-      .collection(COLLECTIONS.USERS)
-      .doc(userId)
-      .collection('following')
-      .orderBy('followedAt', 'desc')
-      .limit(50)
-      .get();
-
-    const followingIds = followingSnapshot.docs.map(doc => doc.id);
-    
-    if (followingIds.length === 0) return [];
-
-    const users: User[] = [];
-    for (const followingId of followingIds) {
-      const user = await getUserById(followingId);
-      if (user) users.push(user);
-    }
-
-    return users;
-  } catch (error) {
-    console.error('Error getting following:', error);
-    return [];
-  }
-};
-
-/**
- * Search users by username
+ * Tìm kiếm người dùng bằng username (Prefix search)
  */
 export const searchUsers = async (query: string): Promise<User[]> => {
   try {
     if (!query.trim()) return [];
 
-    const snapshot = await db()
+    const snapshot = await db
       .collection(COLLECTIONS.USERS)
       .where('username', '>=', query.toLowerCase())
       .where('username', '<=', query.toLowerCase() + '\uf8ff')
@@ -259,14 +192,14 @@ export const searchUsers = async (query: string): Promise<User[]> => {
 };
 
 /**
- * Update user profile
+ * Cập nhật thông tin Profile (Username, Bio, Avatar)
  */
 export const updateUserProfile = async (
   userId: string, 
   updates: Partial<Pick<User, 'username' | 'bio' | 'avatarUrl'>>
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    await db().collection(COLLECTIONS.USERS).doc(userId).update(updates);
+    await db.collection(COLLECTIONS.USERS).doc(userId).update(updates);
     return { success: true };
   } catch (error: any) {
     console.error('Error updating profile:', error);

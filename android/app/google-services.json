@@ -15,11 +15,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "760597409672-glb1pu647df5n25us40dejfm7otoli3u.apps.googleusercontent.com",
+          "client_id": "760597409672-ifkn9a53q2akvvcehi6hbg8hff0t19ec.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.tictocapp",
-            "certificate_hash": "ddb760b8df2e14065a13ac32c54349eb17f6ea97"
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
         {
