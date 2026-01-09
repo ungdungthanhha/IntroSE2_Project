@@ -40,7 +40,7 @@ export interface Message {
   chatId: string;
   senderId: string;
   text: string;
-  timestamp: number;
+  timestamp:  number;
 }
 
 export interface Chat {
@@ -61,7 +61,7 @@ export interface Livestream {
   viewerCount: number;
   likesCount: number;
   isLive: boolean;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface LiveComment {

@@ -6,7 +6,7 @@ import {
 import auth from '@react-native-firebase/auth'; // Sử dụng instance trực tiếp để tránh lỗi
 import firestore from '@react-native-firebase/firestore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-
+import * as videoService from './src/services/videoService'; // Import service
 import { AppTab, User, Video as VideoType } from './src/types/type';
 import { MOCK_VIDEOS } from './src/constants';
 import VideoItem from './src/components/VideoItem';
@@ -18,6 +18,7 @@ import LiveView from './src/components/LiveView';
 import AuthView from './src/components/AuthView';
 import { Compass, Tv } from 'lucide-react-native';
 
+
 const { height } = Dimensions.get('window');
 
 const App = () => {
@@ -25,7 +26,7 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
   const [feedType, setFeedType] = useState<'following' | 'friends' |'foryou'>('foryou');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [videos, setVideos] = useState<VideoType[]>(MOCK_VIDEOS);
+  const [videos, setVideos] = useState<VideoType[]>([]); 
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewingProfile, setViewingProfile] = useState<User | null>(null);
@@ -58,6 +59,22 @@ const App = () => {
 
     return subscriber;
   }, []);
+
+
+useEffect(() => {
+  const fetchRealVideos = async () => {
+    // Gọi hàm lấy video từ Firestore
+    const data = await videoService.getAllVideos(); 
+    if (data.length > 0) {
+      setVideos(data); // Cập nhật video thực vào Feed
+    } else {
+      setVideos(MOCK_VIDEOS); // Nếu chưa có video nào thì hiện tạm mẫu
+    }
+  };
+  
+  fetchRealVideos();
+  // ... giữ logic auth cũ
+}, []);
 
   // --- 2. LOGIC FUNCTIONS ---
   const handleScroll = (event: any) => {
