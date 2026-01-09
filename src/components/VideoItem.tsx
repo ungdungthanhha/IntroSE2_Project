@@ -1,113 +1,170 @@
-
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { Heart, MessageCircle, Bookmark, Plus, Music, Send, X } from 'lucide-react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  View, Text, StyleSheet, Dimensions, Image, 
+  TouchableOpacity, Animated, Easing, Platform,
+  ScrollView, TextInput, KeyboardAvoidingView
+} from 'react-native';
 import Video from 'react-native-video';
+import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send } from 'lucide-react-native';
 import { Video as VideoType, User } from '../types/type';
 
-const { width, height } = Dimensions.get('window');
+const { width, height: WINDOW_HEIGHT } = Dimensions.get('window');
+
+// 1. TÍNH TOÁN CHIỀU CAO KHÍT MÀN HÌNH
+const BOTTOM_NAV_HEIGHT = 60; // Chiều cao thanh Bottom Tab màu đen
+const VIDEO_ITEM_HEIGHT = WINDOW_HEIGHT - BOTTOM_NAV_HEIGHT;
 
 interface VideoItemProps {
   video: VideoType;
   isActive: boolean;
-  onViewProfile?: (user: User) => void; // Callback khi tap vào avatar
+  onViewProfile?: (user: User) => void;
 }
 
 const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile }) => {
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const [isLiked, setIsLiked] = useState(video.isLiked || false);
+  const [isSaved, setIsSaved] = useState(video.isSaved || false);
   const [isFollowing, setIsFollowing] = useState(false);
+
+  // 2. LOGIC ĐĨA NHẠC XOAY
+  useEffect(() => {
+    if (isActive) {
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 3000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      rotateAnim.stopAnimation();
+      rotateAnim.setValue(0);
+    }
+  }, [isActive]);
+
+  const spin = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const handleLike = () => setIsLiked(!isLiked); 
+  const handleSave = () => setIsSaved(!isSaved);
+  const handleFollow = (e: any) => {
+    e.stopPropagation();
+    setIsFollowing(!isFollowing);
+  };
+
+  // --- 1. LOGIC BÌNH LUẬN (State & Mock Data) ---
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([
-    { id: '1', user: 'alex_j', text: 'This is so cool! 🔥', likes: 12 },
-    { id: '2', user: 'chef_master', text: 'Need the tutorial now!', likes: 5 },
+    { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
+    { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
   ]);
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
-    const newComment = {
-      id: Date.now().toString(),
-      user: 'me',
-      text: commentText,
-      likes: 0
-    };
+    const newComment = { id: Date.now().toString(), user: 'Me', text: commentText, likes: 0 };
     setComments([newComment, ...comments]);
     setCommentText('');
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { height: VIDEO_ITEM_HEIGHT }]}>
+      {/* 3. TRÌNH PHÁT VIDEO: contain để hỗ trợ video ngang */}
       <Video
         source={{ uri: video.videoUrl }}
         style={styles.video}
-        resizeMode="cover"
+        resizeMode="contain" 
         repeat={true}
         paused={!isActive}
-        muted={false}
-        playInBackground={false}
-        playWhenInactive={false}
+        onProgress={(e) => setProgress(e.currentTime / e.seekableDuration)}
+        poster={video.videoUrl?.replace(".mp4", ".jpg")}
       />
       
+      {/* 4. LỚP OVERLAY TƯƠNG TÁC: pointerEvents="box-none" giúp ấn được nút */}
       <View style={styles.overlay} pointerEvents="box-none">
-        <View style={styles.rightActions}>
+        
+        {/* SIDEBAR (Cụm nút bên phải) */}
+        <View style={styles.rightActions} pointerEvents="box-none">
+          {/* Nút Avatar & Follow */}
           <TouchableOpacity 
             style={styles.avatarContainer}
             onPress={() => {
               if (onViewProfile) {
-                // Create a User object from video owner info
-                const videoOwner: User = {
+                const owner: User = {
                   uid: video.ownerUid,
                   username: video.ownerName,
+                  birthday: '',
                   email: '',
                   avatarUrl: video.ownerAvatar,
                   bio: '',
                   followersCount: 0,
                   followingCount: 0
                 };
-                onViewProfile(videoOwner);
+                onViewProfile(owner);
               }
             }}
           >
             <Image source={{ uri: video.ownerAvatar }} style={styles.avatar} />
-            <TouchableOpacity 
-              onPress={(e) => {
-                e.stopPropagation();
-                setIsFollowing(true);
-              }}
-              style={[styles.followButton, isFollowing && { backgroundColor: '#fff' }]}
-            >
-              <Plus size={12} color={isFollowing ? "#fe2c55" : "#fff"} strokeWidth={4} />
-            </TouchableOpacity>
+            <View style={styles.plusIcon}><Plus size={12} color="#fff" strokeWidth={4} /></View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action} onPress={() => setIsLiked(!isLiked)}>
+          {/* Like Logic: Thay đổi màu và số lượng */}
+          <TouchableOpacity style={styles.action} onPress={handleLike}>
             <Heart size={32} color={isLiked ? "#fe2c55" : "#fff"} fill={isLiked ? "#fe2c55" : "none"} />
-            <Text style={styles.actionText}>{(video.likesCount + (isLiked ? 1 : 0)).toLocaleString()}</Text>
+            <Text style={styles.actionText}>
+              {(video.likesCount + (isLiked ? 1 : 0)).toLocaleString()}
+            </Text>
           </TouchableOpacity>
 
+          {/* Comment Button */}
           <TouchableOpacity style={styles.action} onPress={() => setShowComments(true)}>
             <MessageCircle size={32} color="#fff" />
             <Text style={styles.actionText}>{video.commentsCount}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action} onPress={() => setIsSaved(!isSaved)}>
+          {/* Save/Bookmark Logic */}
+          <TouchableOpacity style={styles.action} onPress={handleSave}>
             <Bookmark size={32} color={isSaved ? "#facd00" : "#fff"} fill={isSaved ? "#facd00" : "none"} />
-            <Text style={styles.actionText}>{(video.savesCount + (isSaved ? 1 : 0)).toLocaleString()}</Text>
+            <Text style={styles.actionText}>
+              {(video.savesCount + (isSaved ? 1 : 0)).toLocaleString()}
+            </Text>
           </TouchableOpacity>
+
+          {/* Nút Share */}
+          <TouchableOpacity style={styles.action}>
+            <Share2 size={32} color="#fff" />
+            <Text style={styles.actionText}>Share</Text>
+          </TouchableOpacity>
+
+          {/* 5. ĐĨA NHẠC QUAY */}
+          <Animated.View style={[styles.musicDisc, { transform: [{ rotate: spin }] }]}>
+            <Image source={{ uri: video.ownerAvatar }} style={styles.discImage} />
+          </Animated.View>
         </View>
 
-        <View style={styles.bottomInfo}>
+        {/* THÔNG TIN (Trái dưới) */}
+        <View style={styles.bottomInfo} pointerEvents="none">
           <Text style={styles.username}>@{video.ownerName}</Text>
-          <Text style={styles.caption} numberOfLines={3}>{video.caption}</Text>
+          <Text style={styles.caption} numberOfLines={2}>{video.caption}</Text>
           <View style={styles.audioRow}>
             <Music size={14} color="#fff" />
-            <Text style={styles.audioText}>Original Audio - {video.ownerName}</Text>
+            <Text style={styles.audioText} numberOfLines={1}>
+              original sound - {video.ownerName}
+            </Text>
           </View>
         </View>
-      </View>
 
-      {/* Comment Bottom Sheet Simulation */}
+      {/* 6. THANH PROGRESS TRẮNG SIÊU MỎNG */}
+      <View style={styles.progressBarContainer}>
+        <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
+      </View>
+    </View>
+
+    {/* --- 2. BẢNG BÌNH LUẬN (BOTTOM SHEET) --- */}
       {showComments && (
         <View style={styles.commentSheet}>
           <View style={styles.commentHeader}>
@@ -116,7 +173,8 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile })
               <X size={20} color="#000" />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.commentList}>
+
+          <ScrollView style={styles.commentList} showsVerticalScrollIndicator={false}>
             {comments.map(c => (
               <View key={c.id} style={styles.commentItem}>
                 <Image source={{ uri: `https://picsum.photos/seed/${c.user}/100/100` }} style={styles.commentAvatar} />
@@ -131,6 +189,8 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile })
               </View>
             ))}
           </ScrollView>
+
+          {/* Ô nhập liệu có hỗ trợ bàn phím */}
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.commentInputBar}>
               <TextInput 
@@ -152,24 +212,94 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile })
 };
 
 const styles = StyleSheet.create({
-  container: { width: width, height: height, backgroundColor: '#000' },
+  container: { width: width, backgroundColor: '#000' },
   video: { width: '100%', height: '100%' },
-  overlay: { ...StyleSheet.absoluteFillObject, padding: 20, justifyContent: 'flex-end', backgroundColor: 'transparent' },
-  rightActions: { position: 'absolute', right: 12, bottom: 120, alignItems: 'center' },
-  avatarContainer: { marginBottom: 10 },
-  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: '#fff' },
-  followButton: { position: 'absolute', bottom: -8, alignSelf: 'center', backgroundColor: '#fe2c55', borderRadius: 10, padding: 2 },
-  action: { alignItems: 'center', marginTop: 20 },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 4 },
-  bottomInfo: { marginBottom: 100, paddingRight: 80 },
-  username: { color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 8 },
-  caption: { color: '#fff', fontSize: 15, lineHeight: 20, marginBottom: 12 },
+  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
+  
+  // Sidebar căn chỉnh theo mẫu ảnh
+  rightActions: { 
+    position: 'absolute', 
+    right: 8, 
+    bottom: 20, 
+    alignItems: 'center', 
+    zIndex: 50,
+    elevation: 5
+  },
+  avatarContainer: { marginBottom: 15 },
+  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: '#fff' },
+  plusIcon: { 
+    position: 'absolute', 
+    bottom: -8, 
+    alignSelf: 'center', 
+    backgroundColor: '#fe2c55', 
+    borderRadius: 10, 
+    padding: 2 
+  },
+  action: { alignItems: 'center', marginTop: 18 },
+  actionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 4 },
+
+  // Thông tin caption bên trái
+  bottomInfo: { 
+    position: 'absolute', 
+    bottom: 30, 
+    left: 12, 
+    paddingRight: 100 
+  },
+  username: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 5 },
+  caption: { color: '#fff', fontSize: 14, marginBottom: 8, lineHeight: 18 },
   audioRow: { flexDirection: 'row', alignItems: 'center' },
-  audioText: { color: '#fff', fontSize: 14, marginLeft: 8 },
-  // Comment Sheet Styles
-  commentSheet: { position: 'absolute', bottom: 0, width: '100%', height: '60%', backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12, zIndex: 100 },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  commentTitle: { fontWeight: '700', fontSize: 13, textAlign: 'center', flex: 1, color: '#000' },
+  audioText: { color: '#fff', fontSize: 13, marginLeft: 6, width: width * 0.5 },
+
+  // Style đĩa nhạc xoay
+  musicDisc: {
+    marginTop: 20,
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: '#222',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 8,
+    borderColor: '#111',
+  },
+  discImage: { width: 22, height: 22, borderRadius: 11 },
+
+  // Thanh Progress mỏng sát đáy video
+  progressBarContainer: { 
+    position: 'absolute', 
+    bottom: 15, 
+    width: '100%', 
+    height: 1.5, 
+    backgroundColor: 'rgba(255,255,255,0.1)' 
+  },
+  progressBar: { 
+    height: '100%', 
+    backgroundColor: '#fff' 
+  },
+  commentSheet: { 
+    position: 'absolute', 
+    bottom: 0, 
+    width: '100%', 
+    height: '70%', // Chiều cao chiếm 70% màn hình
+    backgroundColor: '#fff', 
+    borderTopLeftRadius: 16, 
+    borderTopRightRadius: 16, 
+    zIndex: 100, // Nằm trên tất cả
+  },
+  commentHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    padding: 15, 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: '#eee' 
+  },
+  commentTitle: { 
+    fontWeight: '700', 
+    fontSize: 13, 
+    textAlign: 'center', 
+    flex: 1, 
+    color: '#000' 
+  },
   commentList: { flex: 1, padding: 15 },
   commentItem: { flexDirection: 'row', marginBottom: 20 },
   commentAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 12 },
@@ -178,8 +308,23 @@ const styles = StyleSheet.create({
   commentMsg: { fontSize: 14, color: '#111' },
   commentLike: { alignItems: 'center' },
   commentLikeCount: { fontSize: 10, color: '#888', marginTop: 2 },
-  commentInputBar: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 1, borderTopColor: '#eee', paddingBottom: 30 },
-  commentInput: { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10, color: '#000' }
+  commentInputBar: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 15, 
+    borderTopWidth: 0.5, 
+    borderTopColor: '#eee',
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20 
+  },
+  commentInput: { 
+    flex: 1, 
+    backgroundColor: '#f1f1f2', 
+    borderRadius: 20, 
+    paddingHorizontal: 15, 
+    paddingVertical: 8, 
+    marginRight: 10, 
+    color: '#000' 
+  }
 });
 
 export default VideoItem;

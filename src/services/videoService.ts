@@ -1,19 +1,127 @@
-import { db, COLLECTIONS } from '../config/firebase';
+import { db, COLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
 import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
 
+/**
+ * 1. Tải Video lên Cloudinary (Sử dụng Unsigned Upload)
+ */
+export const uploadVideoToCloudinary = async (fileUri: string) => {
+  const cloudName = 'dvzhdawxp'; 
+  const uploadPreset = 'tictoc_uploads'; 
+  
+  const formData = new FormData();
+  formData.append('file', {
+    uri: fileUri,
+    type: 'video/mp4',
+    name: 'upload.mp4',
+  } as any);
+  formData.append('upload_preset', uploadPreset);
+
+  try {
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
+      {
+        method: 'POST',
+        body: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+    const data = await response.json();
+    return data.secure_url; // Trả về link URL của video
+  } catch (error) {
+    console.error('Cloudinary Upload Error:', error);
+    return null;
+  }
+};
+
+/**
+ * 2. Lưu thông tin Metadata của video vào Firestore sau khi upload
+ */
+export const saveVideoMetadata = async (videoData: Partial<Video>) => {
+  try {
+    const newVideoRef = db.collection(COLLECTIONS.VIDEOS).doc();
+    
+    const finalData = {
+      ...videoData,
+      id: newVideoRef.id,
+      likesCount: 0,
+      commentsCount: 0,
+      savesCount: 0, // Khởi tạo giá trị lưu
+      timestamp: Date.now(), // Lưu dạng số để dễ sắp xếp
+    };
+
+    await newVideoRef.set(finalData);
+    return { success: true, video: finalData };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 3. Lấy danh sách TOÀN BỘ video từ Firestore (Cho màn hình Feed)
+ */
+export const getAllVideos = async (): Promise<Video[]> => {
+  try {
+    const snapshot = await db
+      .collection(COLLECTIONS.VIDEOS)
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Video)); //
+  } catch (error) {
+    console.error('Error getting videos:', error);
+    return [];
+  }
+};
+
+/**
+ * 4. Lấy danh sách video của một USER cụ thể (Cho màn hình Profile)
+ */
+export const getVideosByUser = async (userId: string): Promise<Video[]> => {
+  try {
+    const snapshot = await db
+      .collection(COLLECTIONS.VIDEOS)
+      .where('ownerUid', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Video)); //
+  } catch (error) {
+    console.error('Error getting user videos:', error);
+    return [];
+  }
+};
+
+/**
+ * 5. Xử lý Like/Unlike Video (Sử dụng Firestore Batch)
+ */
 export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: boolean) => {
   try {
     const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
-    const batch = db.batch(); 
+    const likeRef = videoRef.collection('likes').doc(userId);
+    const batch = db.batch(); //
 
     if (isLiked) {
-      batch.delete(videoRef.collection('likes').doc(userId));
-      batch.update(videoRef, { likesCount: firestore.FieldValue.increment(-1) });
+      batch.delete(likeRef);
+      batch.update(videoRef, {
+        likesCount: firestore.FieldValue.increment(-1)
+      });
     } else {
-      batch.set(videoRef.collection('likes').doc(userId), { userId, createdAt: new Date().toISOString() });
-      batch.update(videoRef, { likesCount: firestore.FieldValue.increment(1) });
+      batch.set(likeRef, {
+        userId,
+        createdAt: new Date().toISOString()
+      });
+      batch.update(videoRef, {
+        likesCount: firestore.FieldValue.increment(1)
+      });
     }
+
     await batch.commit();
     return { success: true };
   } catch (error: any) {
@@ -21,18 +129,32 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
   }
 };
 
-export const saveVideoMetadata = async (videoData: Partial<Video>) => {
+/**
+ * 6. Thêm bình luận vào video
+ */
+export const addComment = async (videoId: string, userId: string, userAvatar: string, username: string, text: string) => {
   try {
-    const newVideoRef = db.collection(COLLECTIONS.VIDEOS).doc();
-    const finalData = {
-      ...videoData,
-      id: newVideoRef.id,
-      likesCount: 0,
-      commentsCount: 0,
-      createdAt: new Date().toISOString()
+    const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
+    const commentRef = videoRef.collection('comments').doc();
+
+    const newComment: Comment = {
+      id: commentRef.id,
+      videoId,
+      userUid: userId,
+      username,
+      avatarUrl: userAvatar,
+      text,
+      timestamp: new Date().getTime()
     };
-    await newVideoRef.set(finalData);
-    return { success: true, video: finalData };
+
+    const batch = db.batch();
+    batch.set(commentRef, newComment);
+    batch.update(videoRef, {
+      commentsCount: firestore.FieldValue.increment(1)
+    });
+
+    await batch.commit();
+    return { success: true, comment: newComment }; //
   } catch (error: any) {
     return { success: false, error: error.message };
   }
