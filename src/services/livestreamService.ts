@@ -1,6 +1,6 @@
 import { db, COLLECTIONS } from '../config/firebase';
 import firestore from '@react-native-firebase/firestore';
-import { Livestream, LiveComment } from '../types';
+import { Livestream, LiveComment } from '../types/type';
 
 export const getActiveLivestreams = async (): Promise<Livestream[]> => {
   try {

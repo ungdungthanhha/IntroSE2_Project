@@ -1,5 +1,5 @@
 import { db, COLLECTIONS } from '../config/firebase';
-import { Video, Comment } from '../types';
+import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
 
 export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: boolean) => {

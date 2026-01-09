@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Timer, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal } from 'lucide-react-native';
-import { User, Video } from '../types';
+import { User, Video } from '../types/type';
 import * as authService from '../services/authService';
 import * as userService from '../services/userService';
 import TimeLimitModal from './TimeLimitModal';

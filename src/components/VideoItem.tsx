@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Image, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Send, X } from 'lucide-react-native';
 import Video from 'react-native-video';
-import { Video as VideoType, User } from '../types';
+import { Video as VideoType, User } from '../types/type';
 
 const { width, height } = Dimensions.get('window');
 

@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Home, Compass, Plus, MessageSquare, User } from 'lucide-react-native';
-import { AppTab } from '../types';
+import { AppTab } from '../types/type';
 
 interface BottomNavProps {
   activeTab: AppTab;

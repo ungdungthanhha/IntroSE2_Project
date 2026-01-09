@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput } from 'react-native';
 import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, ChevronDown, Camera } from 'lucide-react-native';
-import { Chat } from '../types';
+import { Chat } from '../types/type';
 import { MOCK_CHATS } from '../constants';
 
 interface ChatViewProps {

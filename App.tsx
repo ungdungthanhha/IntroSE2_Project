@@ -7,7 +7,7 @@ import auth from '@react-native-firebase/auth'; // Sử dụng instance trực t
 import firestore from '@react-native-firebase/firestore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-import { AppTab, User, Video as VideoType } from './src/types';
+import { AppTab, User, Video as VideoType } from './src/types/type';
 import { MOCK_VIDEOS } from './src/constants';
 import VideoItem from './src/components/VideoItem';
 import BottomNav from './src/components/BottomNav';
@@ -29,6 +29,7 @@ const App = () => {
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewingProfile, setViewingProfile] = useState<User | null>(null);
+  const [isInChatDetail, setIsInChatDetail] = useState(false);
 
   useEffect(() => {
     // Configure Google Sign-In
@@ -123,7 +124,7 @@ const App = () => {
             {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} onPost={() => {}} />}
 
             {/* INBOX & DISCOVER */}
-            {activeTab === AppTab.INBOX && <ChatView />}
+            {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} />}
             {activeTab === AppTab.DISCOVER && (
               <View style={styles.centerView}>
                 <Compass color="#ddd" size={64} />
@@ -146,8 +147,8 @@ const App = () => {
             )}
           </View>
 
-          {/* Ẩn thanh điều hướng dưới khi đang ở chế độ đặc biệt */}
-          {!viewingProfile && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
+          {/* Ẩn thanh điều hướng dưới khi đang ở chế độ đặc biệt hoặc xem chi tiết chat */}
+          {!viewingProfile && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && !isInChatDetail && (
             <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
           )}
         </>

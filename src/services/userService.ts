@@ -1,5 +1,5 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
-import { User } from '../types';
+import { User } from '../types/type';
 
 
 /**

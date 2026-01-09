@@ -1,6 +1,6 @@
 import auth from '@react-native-firebase/auth'; // Module gốc để lấy Provider
 import { firebaseAuth, db, COLLECTIONS } from '../config/firebase';
-import { User } from '../types';
+import { User } from '../types/type';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 // --- VALIDATION HELPERS ---
