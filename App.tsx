@@ -23,7 +23,7 @@ const { height } = Dimensions.get('window');
 const App = () => {
   // --- 1. TẤT CẢ HOOKS LUÔN ĐẶT Ở TRÊN CÙNG (Fix lỗi "Fewer hooks than expected") ---
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
-  const [feedType, setFeedType] = useState<'following' | 'foryou'>('foryou');
+  const [feedType, setFeedType] = useState<'following' | 'friends' |'foryou'>('foryou');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [videos, setVideos] = useState<VideoType[]>(MOCK_VIDEOS);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
@@ -109,6 +109,9 @@ const App = () => {
                   <View style={styles.headerTabs}>
                     <TouchableOpacity onPress={() => setFeedType('following')}>
                       <Text style={[styles.headerTab, feedType === 'following' && styles.headerTabActive]}>Following</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setFeedType('friends')}>
+                      <Text style={[styles.headerTab, feedType === 'friends' && styles.headerTabActive]}>Friends</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setFeedType('foryou')}>
                       <Text style={[styles.headerTab, feedType === 'foryou' && styles.headerTabActive]}>For You</Text>
