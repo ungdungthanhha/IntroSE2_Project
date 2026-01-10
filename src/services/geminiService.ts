@@ -1,8 +1,9 @@
 
 import { GoogleGenAI } from "@google/genai";
+import { GEMINI_API_KEY } from '@env';
 
-// Fix: Initializing GoogleGenAI using process.env.API_KEY directly as per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Fix: Initializing GoogleGenAI using environment variable
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 export const generateCaption = async (description: string): Promise<string> => {
   try {
