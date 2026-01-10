@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 25,
     justifyContent: 'space-between',
-    backgroundColor: 'transparent',
+    backgroundColor: 'black',
     zIndex: 100,
   },
   containerLight: {
