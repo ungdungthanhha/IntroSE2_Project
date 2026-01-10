@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, View, Text, TouchableOpacity, SafeAreaView, 
-  ScrollView, Dimensions, StatusBar 
+import {
+  StyleSheet, View, Text, TouchableOpacity, SafeAreaView,
+  ScrollView, Dimensions, StatusBar
 } from 'react-native';
 import auth from '@react-native-firebase/auth'; // Sử dụng instance trực tiếp để tránh lỗi
 import firestore from '@react-native-firebase/firestore';
@@ -24,9 +24,9 @@ const { height } = Dimensions.get('window');
 const App = () => {
   // --- 1. TẤT CẢ HOOKS LUÔN ĐẶT Ở TRÊN CÙNG (Fix lỗi "Fewer hooks than expected") ---
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
-  const [feedType, setFeedType] = useState<'following' | 'friends' |'foryou'>('foryou');
+  const [feedType, setFeedType] = useState<'following' | 'friends' | 'foryou'>('foryou');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [videos, setVideos] = useState<VideoType[]>([]); 
+  const [videos, setVideos] = useState<VideoType[]>([]);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewingProfile, setViewingProfile] = useState<User | null>(null);
@@ -61,20 +61,20 @@ const App = () => {
   }, []);
 
 
-useEffect(() => {
-  const fetchRealVideos = async () => {
-    // Gọi hàm lấy video từ Firestore
-    const data = await videoService.getAllVideos(); 
-    if (data.length > 0) {
-      setVideos(data); // Cập nhật video thực vào Feed
-    } else {
-      setVideos(MOCK_VIDEOS); // Nếu chưa có video nào thì hiện tạm mẫu
-    }
-  };
-  
-  fetchRealVideos();
-  // ... giữ logic auth cũ
-}, []);
+  useEffect(() => {
+    const fetchRealVideos = async () => {
+      // Gọi hàm lấy video từ Firestore
+      const data = await videoService.getAllVideos();
+      if (data.length > 0) {
+        setVideos(data); // Cập nhật video thực vào Feed
+      } else {
+        setVideos(MOCK_VIDEOS); // Nếu chưa có video nào thì hiện tạm mẫu
+      }
+    };
+
+    fetchRealVideos();
+    // ... giữ logic auth cũ
+  }, []);
 
   // --- 2. LOGIC FUNCTIONS ---
   const handleScroll = (event: any) => {
@@ -83,8 +83,8 @@ useEffect(() => {
     if (index !== activeVideoIndex) setActiveVideoIndex(index);
   };
 
-  const filteredVideos = feedType === 'foryou' 
-    ? videos 
+  const filteredVideos = feedType === 'foryou'
+    ? videos
     : videos.filter((_, i) => i % 2 === 0);
 
   // --- 3. UI RENDER (Sử dụng toán tử điều kiện bên trong, KHÔNG dùng return sớm) ---
@@ -92,7 +92,7 @@ useEffect(() => {
     <SafeAreaView style={styles.container}>
       {/* Tùy chỉnh màu thanh trạng thái dựa trên màn hình */}
       <StatusBar barStyle={activeTab === AppTab.HOME ? "light-content" : "dark-content"} />
-      
+
       {!isAuthenticated ? (
         <AuthView />
       ) : (
@@ -101,22 +101,22 @@ useEffect(() => {
             {/* HOME FEED VIEW */}
             {activeTab === AppTab.HOME && !viewingProfile && (
               <View style={styles.homeContainer}>
-                <ScrollView 
-                  pagingEnabled 
-                  showsVerticalScrollIndicator={false} 
-                  onScroll={handleScroll} 
+                <ScrollView
+                  pagingEnabled
+                  showsVerticalScrollIndicator={false}
+                  onScroll={handleScroll}
                   scrollEventThrottle={16}
                 >
                   {filteredVideos.map((v, idx) => (
-                    <VideoItem 
-                      key={v.id} 
-                      video={v} 
-                      isActive={activeVideoIndex === idx} 
-                      onViewProfile={setViewingProfile} 
+                    <VideoItem
+                      key={v.id}
+                      video={v}
+                      isActive={activeVideoIndex === idx}
+                      onViewProfile={setViewingProfile}
                     />
                   ))}
                 </ScrollView>
-                
+
                 {/* Header với nút LIVE theo thiết kế TikTok */}
                 <View style={styles.homeHeader}>
                   <TouchableOpacity onPress={() => setActiveTab(AppTab.LIVE)} style={styles.liveIcon}>
@@ -141,7 +141,7 @@ useEffect(() => {
 
             {/* LIVE & UPLOAD VIEWS */}
             {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} />}
-            {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} onPost={() => {}} />}
+            {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} onPost={() => { }} currentUser={currentUser} />}
 
             {/* INBOX & DISCOVER */}
             {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} />}
@@ -155,14 +155,14 @@ useEffect(() => {
 
             {/* PROFILE VIEW (Tài khoản của tôi hoặc người khác) */}
             {(activeTab === AppTab.PROFILE || viewingProfile) && currentUser && (
-              <ProfileView 
-                user={viewingProfile || currentUser} 
-                userVideos={videos.filter(v => v.ownerUid === (viewingProfile?.uid || currentUser.uid))} 
-                isOwnProfile={!viewingProfile} 
+              <ProfileView
+                user={viewingProfile || currentUser}
+                userVideos={videos.filter(v => v.ownerUid === (viewingProfile?.uid || currentUser.uid))}
+                isOwnProfile={!viewingProfile}
                 onBack={() => {
                   setViewingProfile(null);
                   setActiveTab(AppTab.HOME);
-                }} 
+                }}
               />
             )}
           </View>

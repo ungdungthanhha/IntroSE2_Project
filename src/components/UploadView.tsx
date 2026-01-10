@@ -22,9 +22,10 @@ import * as videoService from '../services/videoService';
 interface UploadViewProps {
   onClose: () => void;
   onPost: (video: any) => void;
+  currentUser: any;
 }
 
-const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
+const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser }) => {
   const [step, setStep] = useState<'select' | 'details'>('select');
   const [caption, setCaption] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -111,6 +112,14 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
 
       if (response.assets && response.assets[0]) {
         const asset = response.assets[0];
+
+        // Check duration (60s limit)
+        const assetDuration = asset.duration || 0;
+        if (assetDuration > 60) {
+          Alert.alert('Video too long', 'Please record a video under 60 seconds.');
+          return;
+        }
+
         setPreviewUrl(asset.uri || null);
         setThumbnailUrl(asset.uri || null);
         setIsVideo(true);
@@ -122,12 +131,18 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
   // Pick video/image from gallery
   const handlePickFromGallery = async () => {
     setIsLoading(true);
-    const videoUri = await videoService.pickVideoFromGallery();
+    const result = await videoService.pickVideoFromGallery();
     setIsLoading(false);
 
-    if (videoUri) {
-      setPreviewUrl(videoUri);
-      setThumbnailUrl(videoUri);
+    if (result) {
+      // Check duration (60s limit)
+      if (result.duration > 60) {
+        Alert.alert('Video too long', 'Please select a video under 60 seconds.');
+        return;
+      }
+
+      setPreviewUrl(result.uri);
+      setThumbnailUrl(result.uri);
       setIsVideo(true);
       setStep('details');
     }
@@ -185,22 +200,49 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
     setIsGenerating(false);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!previewUrl) {
       Alert.alert('Error', 'Please select a video or photo first');
       return;
     }
 
-    onPost({
-      id: Date.now().toString(),
-      videoUrl: previewUrl,
-      caption: caption,
-      likesCount: 0,
-      commentsCount: 0,
-      savesCount: 0,
-      isVideo: isVideo
-    });
-    onClose();
+    setIsLoading(true);
+    try {
+      // 1. Upload to Cloudinary
+      console.log('Starting Cloudinary upload...');
+      const cloudinaryUrl = await videoService.uploadVideoToCloudinary(previewUrl);
+
+      if (!cloudinaryUrl) {
+        throw new Error('Failed to upload video to Cloudinary');
+      }
+
+      console.log('Cloudinary upload success:', cloudinaryUrl);
+
+      // 2. Save metadata to Firestore
+      const videoMetadata = {
+        ownerUid: currentUser?.uid || 'anonymous',
+        ownerName: currentUser?.username || 'Anonymous User',
+        ownerAvatar: currentUser?.avatarUrl || 'https://www.gravatar.com/avatar/?d=mp',
+        videoUrl: cloudinaryUrl,
+        caption: caption,
+        createdAt: new Date().toISOString() // Or use serverTimestamp if in videoService
+      };
+
+      const result = await videoService.saveVideoMetadata(videoMetadata as any);
+
+      if (result.success) {
+        Alert.alert('Success', 'Your video has been posted!');
+        onPost(result.video);
+        onClose();
+      } else {
+        throw new Error(result.error || 'Failed to save video metadata');
+      }
+    } catch (error: any) {
+      console.error('Submit error:', error);
+      Alert.alert('Error', error.message || 'An error occurred during post');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -351,9 +393,24 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
             <TouchableOpacity style={styles.draftBtn} onPress={onClose}>
               <Text style={styles.draftBtnText}>Drafts</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.postBtn} onPress={handleSubmit}>
-              <Text style={styles.postBtnText}>Post</Text>
+            <TouchableOpacity
+              style={[styles.postBtn, isLoading && styles.postBtnDisabled]}
+              onPress={handleSubmit}
+              disabled={isLoading}
+            >
+              <Text style={styles.postBtnText}>{isLoading ? "Posting..." : "Post"}</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Full-screen Loading Overlay for Posting */}
+      {isLoading && step === 'details' && (
+        <View style={styles.fullscreenLoading}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#fe2c55" />
+            <Text style={styles.loadingBoxText}>Posting your video...</Text>
+            <Text style={styles.loadingBoxSub}>Please don't close the app</Text>
           </View>
         </View>
       )}
@@ -632,6 +689,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 15,
+  },
+  postBtnDisabled: {
+    backgroundColor: '#ff8a9e',
+  },
+  fullscreenLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingBox: {
+    backgroundColor: '#fff',
+    padding: 30,
+    borderRadius: 16,
+    alignItems: 'center',
+    width: '80%',
+  },
+  loadingBoxText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
+  },
+  loadingBoxSub: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#666',
   },
 });
 

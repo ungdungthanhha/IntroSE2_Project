@@ -29,6 +29,10 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
       }
     );
     const data = await response.json();
+    // DEBUG DATA UPLOAD
+    if (data) {
+      console.log('Cloudinary Upload Success:', data);
+    }
     return data.secure_url; // Trả về link URL của video
   } catch (error) {
     console.error('Cloudinary Upload Error:', error);
@@ -165,7 +169,7 @@ export const addComment = async (videoId: string, userId: string, userAvatar: st
 /**
  * 7. Chọn Video từ Thư viện
  */
-export const pickVideoFromGallery = async (): Promise<string | null> => {
+export const pickVideoFromGallery = async (): Promise<{ uri: string; duration: number } | null> => {
   try {
     // Yêu cầu quyền truy cập (Dành cho Android)
     if (Platform.OS === 'android') {
@@ -203,7 +207,11 @@ export const pickVideoFromGallery = async (): Promise<string | null> => {
           Alert.alert('Lỗi', response.errorMessage || 'Không thể chọn video');
           resolve(null);
         } else if (response.assets && response.assets[0]) {
-          resolve(response.assets[0].uri || null);
+          const asset = response.assets[0];
+          resolve({
+            uri: asset.uri || '',
+            duration: asset.duration || 0
+          });
         } else {
           resolve(null);
         }
