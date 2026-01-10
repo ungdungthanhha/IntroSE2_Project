@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,10 +6,16 @@ import {
   TouchableOpacity, 
   TextInput, 
   ScrollView,
-  SafeAreaView
+  SafeAreaView,
+  Alert,
+  PermissionsAndroid,
+  Platform,
+  ActivityIndicator,
+  Image
 } from 'react-native';
-import { X, Wand2, ArrowLeft, Camera, Image as ImageIcon } from 'lucide-react-native';
+import { X, Wand2, ArrowLeft, Camera, Image as ImageIcon, RefreshCw, Square, Circle } from 'lucide-react-native';
 import Video from 'react-native-video';
+import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
 import { generateCaption } from '../services/geminiService';
 
 interface UploadViewProps {
@@ -19,94 +24,288 @@ interface UploadViewProps {
 }
 
 const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
-  const [step, setStep] = useState<'record' | 'details'>('record');
+  const [step, setStep] = useState<'select' | 'details'>('select');
   const [caption, setCaption] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [isVideo, setIsVideo] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [duration, setDuration] = useState<'15s' | '60s'> ('60s');
 
-  const handleCapture = () => {
-    setPreviewUrl('https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-city-lighting-at-night-14028-large.mp4');
-    setStep('details');
+  // Request permissions for Android
+  const requestPermissions = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    
+    try {
+      const androidVersion = Platform.Version;
+      
+      if (androidVersion >= 33) {
+        // Android 13+ uses granular media permissions
+        const results = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+        ]);
+        
+        const granted = 
+          results[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED &&
+          results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === PermissionsAndroid.RESULTS.GRANTED;
+        
+        return granted;
+      } else {
+        // Older Android versions
+        const results = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        ]);
+        
+        const granted = 
+          results[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED &&
+          results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === PermissionsAndroid.RESULTS.GRANTED;
+        
+        return granted;
+      }
+    } catch (err) {
+      console.warn('Permission error:', err);
+      return false;
+    }
+  };
+
+  // Record video from camera
+  const handleRecordVideo = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Camera and microphone permissions are required to record video.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const maxDurationSeconds = duration === '15s' ? 15 : duration === '60s' ? 60 : 180;
+    
+    const options: CameraOptions = {
+      mediaType: 'video' as MediaType,
+      videoQuality: 'high',
+      durationLimit: maxDurationSeconds,
+      cameraType: 'back',
+      saveToPhotos: true,
+    };
+
+    launchCamera(options, (response) => {
+      setIsLoading(false);
+      
+      if (response.didCancel) {
+        console.log('User cancelled camera');
+        return;
+      }
+      
+      if (response.errorCode) {
+        Alert.alert('Error', response.errorMessage || 'Failed to record video');
+        return;
+      }
+      
+      if (response.assets && response.assets[0]) {
+        const asset = response.assets[0];
+        setPreviewUrl(asset.uri || null);
+        setThumbnailUrl(asset.uri || null);
+        setIsVideo(true);
+        setStep('details');
+      }
+    });
+  };
+
+  // Pick video/image from gallery
+  const handlePickFromGallery = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Storage permission is required to access your media library.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const options: ImageLibraryOptions = {
+      mediaType: 'mixed' as MediaType, // Allow both photos and videos
+      videoQuality: 'high',
+      selectionLimit: 1,
+    };
+
+    launchImageLibrary(options, (response) => {
+      setIsLoading(false);
+      
+      if (response.didCancel) {
+        console.log('User cancelled image picker');
+        return;
+      }
+      
+      if (response.errorCode) {
+        Alert.alert('Error', response.errorMessage || 'Failed to pick media');
+        return;
+      }
+      
+      if (response.assets && response.assets[0]) {
+        const asset = response.assets[0];
+        setPreviewUrl(asset.uri || null);
+        setThumbnailUrl(asset.uri || null);
+        setIsVideo(asset.type?.startsWith('video') || false);
+        setStep('details');
+      }
+    });
+  };
+
+  // Take a photo
+  const handleTakePhoto = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const options: CameraOptions = {
+      mediaType: 'photo' as MediaType,
+      quality: 1,
+      saveToPhotos: true,
+      cameraType: 'back',
+    };
+
+    launchCamera(options, (response) => {
+      setIsLoading(false);
+      
+      if (response.didCancel) {
+        console.log('User cancelled camera');
+        return;
+      }
+      
+      if (response.errorCode) {
+        Alert.alert('Error', response.errorMessage || 'Failed to take photo');
+        return;
+      }
+      
+      if (response.assets && response.assets[0]) {
+        const asset = response.assets[0];
+        setPreviewUrl(asset.uri || null);
+        setThumbnailUrl(asset.uri || null);
+        setIsVideo(false);
+        setStep('details');
+      }
+    });
   };
 
   const handleAiCaption = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
-    const aiCaption = await generateCaption("a girl walking in neon city lights at night");
-    setCaption(aiCaption);
+    try {
+      const aiCaption = await generateCaption("a creative short video content for social media");
+      setCaption(aiCaption);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate caption');
+    }
     setIsGenerating(false);
   };
 
   const handleSubmit = () => {
+    if (!previewUrl) {
+      Alert.alert('Error', 'Please select a video or photo first');
+      return;
+    }
+    
     onPost({
       id: Date.now().toString(),
       videoUrl: previewUrl,
       caption: caption,
       likesCount: 0,
       commentsCount: 0,
-      savesCount: 0
+      savesCount: 0,
+      isVideo: isVideo
     });
     onClose();
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {step === 'record' ? (
-        <View style={styles.recordContainer}>
-          <View style={styles.recordHeader}>
+      {step === 'select' ? (
+        <View style={styles.selectContainer}>
+          <View style={styles.selectHeader}>
             <TouchableOpacity onPress={onClose} style={styles.iconBtn}>
-              <X size={32} color="#fff" />
+              <X size={28} color="#fff" />
             </TouchableOpacity>
-            <View style={styles.durationSelector}>
-              <Text style={[styles.durationText, styles.activeDuration]}>60s</Text>
-              <Text style={styles.durationText}>15s</Text>
-              <Text style={styles.durationText}>Templates</Text>
-            </View>
+            <Text style={styles.selectTitle}>Create</Text>
             <View style={{ width: 40 }} />
           </View>
 
-          <View style={styles.cameraPlaceholder}>
-            <View style={styles.cameraContent}>
-              <Camera size={64} color="#333" />
-              <Text style={styles.cameraText}>Recording View</Text>
-            </View>
-            
-            <View style={styles.sideTools}>
-              <TouchableOpacity style={styles.toolItem}>
-                <View style={styles.toolIconWrap}><ArrowLeft style={{ transform: [{ rotate: '90deg' }] }} size={20} color="#fff"/></View>
-                <Text style={styles.toolLabel}>Flip</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolItem}>
-                <View style={styles.toolIconWrap}><Wand2 size={20} color="#fff"/></View>
-                <Text style={styles.toolLabel}>Filters</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Duration Selector for Video Recording */}
+          <View style={styles.durationSelector}>
+            <TouchableOpacity 
+              onPress={() => setDuration('15s')}
+              style={[styles.durationBtn, duration === '15s' && styles.durationBtnActive]}
+            >
+              <Text style={[styles.durationText, duration === '15s' && styles.durationTextActive]}>15s</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setDuration('60s')}
+              style={[styles.durationBtn, duration === '60s' && styles.durationBtnActive]}
+            >
+              <Text style={[styles.durationText, duration === '60s' && styles.durationTextActive]}>60s</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.recordFooter}>
-            <TouchableOpacity style={styles.footerAction}>
-              <View style={styles.uploadIconWrap}>
-                <ImageIcon size={20} color="#fff" />
+          <View style={styles.optionsContainer}>
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#fe2c55" />
+                <Text style={styles.loadingText}>Processing...</Text>
               </View>
-              <Text style={styles.footerActionText}>Upload</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity onPress={handleCapture} style={styles.recordBtnOuter}>
-              <View style={styles.recordBtnInner} />
-            </TouchableOpacity>
+            ) : (
+              <>
+                {/* Record Video Button */}
+                <TouchableOpacity style={styles.mainBtn} onPress={handleRecordVideo}>
+                  <View style={styles.mainBtnIcon}>
+                    <Camera size={36} color="#fff" />
+                  </View>
+                  <Text style={styles.mainBtnText}>Record Video</Text>
+                  <Text style={styles.mainBtnSub}>Record up to {duration} video</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity style={styles.footerAction}>
-              <View style={[styles.uploadIconWrap, { backgroundColor: '#9333ea' }]}>
-                <Text>✨</Text>
-              </View>
-              <Text style={styles.footerActionText}>Effects</Text>
-            </TouchableOpacity>
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Secondary Options */}
+                <View style={styles.secondaryOptions}>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={handlePickFromGallery}>
+                    <View style={styles.secondaryBtnIcon}>
+                      <ImageIcon size={24} color="#fff" />
+                    </View>
+                    <Text style={styles.secondaryBtnText}>Gallery</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={handleTakePhoto}>
+                    <View style={styles.secondaryBtnIcon}>
+                      <Circle size={24} color="#fff" />
+                    </View>
+                    <Text style={styles.secondaryBtnText}>Photo</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+
+          <View style={styles.bottomHint}>
+            <Text style={styles.hintText}>Tip: Use high quality lighting for best results</Text>
           </View>
         </View>
       ) : (
         <View style={styles.detailsContainer}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => setStep('record')} style={styles.headerBtn}>
+            <TouchableOpacity onPress={() => setStep('select')} style={styles.headerBtn}>
               <ArrowLeft size={24} color="#000" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Post</Text>
@@ -124,12 +323,20 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
                 style={styles.captionInput}
               />
               <View style={styles.previewThumbnail}>
-                <Video 
-                  source={{ uri: previewUrl! }} 
-                  style={{ width: '100%', height: '100%' }} 
-                  resizeMode="cover"
-                  paused={true}
-                />
+                {isVideo ? (
+                  <Video 
+                    source={{ uri: previewUrl! }} 
+                    style={{ width: '100%', height: '100%' }} 
+                    resizeMode="cover"
+                    paused={true}
+                  />
+                ) : (
+                  <Image 
+                    source={{ uri: thumbnailUrl! }} 
+                    style={{ width: '100%', height: '100%' }} 
+                    resizeMode="cover"
+                  />
+                )}
               </View>
             </View>
 
@@ -181,116 +388,141 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#000',
   },
-  recordContainer: {
+  selectContainer: {
     flex: 1,
     backgroundColor: '#000',
   },
-  recordHeader: {
+  selectHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    zIndex: 10,
+    padding: 16,
+    paddingTop: 20,
   },
   iconBtn: {
     padding: 8,
   },
+  selectTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
   durationSelector: {
     flexDirection: 'row',
-    gap: 16,
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 16,
+  },
+  durationBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  durationBtnActive: {
+    backgroundColor: '#fe2c55',
   },
   durationText: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
-  activeDuration: {
+  durationTextActive: {
     color: '#fff',
-    borderBottomWidth: 2,
-    borderBottomColor: '#fe2c55',
-    paddingBottom: 4,
   },
-  cameraPlaceholder: {
+  optionsContainer: {
     flex: 1,
-    backgroundColor: '#050505',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
-  cameraContent: {
+  loadingContainer: {
     alignItems: 'center',
   },
-  cameraText: {
-    color: '#444',
-    marginTop: 16,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  sideTools: {
-    position: 'absolute',
-    right: 16,
-    top: 40,
-    gap: 24,
-  },
-  toolItem: {
-    alignItems: 'center',
-  },
-  toolIconWrap: {
-    width: 40,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  toolLabel: {
+  loadingText: {
     color: '#fff',
-    fontSize: 10,
+    marginTop: 16,
+    fontSize: 16,
+  },
+  mainBtn: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 16,
+    backgroundColor: 'rgba(254,44,85,0.15)',
+    borderWidth: 2,
+    borderColor: '#fe2c55',
+  },
+  mainBtnIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#fe2c55',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  mainBtnText: {
+    color: '#fff',
+    fontSize: 18,
     fontWeight: '700',
+  },
+  mainBtnSub: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
     marginTop: 4,
   },
-  recordFooter: {
-    padding: 30,
-    paddingBottom: 50,
+  divider: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    width: '100%',
+    marginVertical: 24,
   },
-  footerAction: {
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  dividerText: {
+    color: 'rgba(255,255,255,0.5)',
+    paddingHorizontal: 16,
+    fontSize: 14,
+  },
+  secondaryOptions: {
+    flexDirection: 'row',
+    gap: 16,
+    width: '100%',
+  },
+  secondaryBtn: {
+    flex: 1,
     alignItems: 'center',
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  uploadIconWrap: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
+  secondaryBtnIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  footerActionText: {
+  secondaryBtnText: {
     color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '600',
   },
-  recordBtnOuter: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.5)',
-    justifyContent: 'center',
+  bottomHint: {
+    padding: 24,
     alignItems: 'center',
   },
-  recordBtnInner: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#fe2c55',
-    borderRadius: 32,
+  hintText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 13,
   },
   detailsContainer: {
     flex: 1,

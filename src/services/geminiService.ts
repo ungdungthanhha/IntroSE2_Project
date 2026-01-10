@@ -10,11 +10,12 @@ export const generateCaption = async (description: string): Promise<string> => {
       model: 'gemini-3-flash-preview',
       contents: `Generate a catchy TikTok-style caption with emojis for a video described as: "${description}". Keep it short and engaging.`,
     });
-    return response.text?.trim() || "No caption generated.";
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    return "Something went wrong with the AI.";
-  }
+    const text = response.text || "";
+      return text.trim() || "No caption generated.";
+    } catch (error) {
+      console.error("Gemini Error:", error);
+      return "Something went wrong with the AI.";
+    }
 };
 
 export const simulateLiveChat = async (topic: string): Promise<string[]> => {
