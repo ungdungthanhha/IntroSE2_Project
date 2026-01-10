@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  TextInput, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
   ScrollView,
   SafeAreaView,
   Alert,
@@ -17,6 +17,7 @@ import { X, Wand2, ArrowLeft, Camera, Image as ImageIcon, RefreshCw, Square, Cir
 import Video from 'react-native-video';
 import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
 import { generateCaption } from '../services/geminiService';
+import * as videoService from '../services/videoService';
 
 interface UploadViewProps {
   onClose: () => void;
@@ -31,15 +32,15 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [isVideo, setIsVideo] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [duration, setDuration] = useState<'15s' | '60s'> ('60s');
+  const [duration, setDuration] = useState<'15s' | '60s'>('60s');
 
   // Request permissions for Android
   const requestPermissions = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
-    
+
     try {
       const androidVersion = Platform.Version;
-      
+
       if (androidVersion >= 33) {
         // Android 13+ uses granular media permissions
         const results = await PermissionsAndroid.requestMultiple([
@@ -48,11 +49,11 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
           PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
           PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
         ]);
-        
-        const granted = 
+
+        const granted =
           results[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED &&
           results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === PermissionsAndroid.RESULTS.GRANTED;
-        
+
         return granted;
       } else {
         // Older Android versions
@@ -62,11 +63,11 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
           PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         ]);
-        
-        const granted = 
+
+        const granted =
           results[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED &&
           results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === PermissionsAndroid.RESULTS.GRANTED;
-        
+
         return granted;
       }
     } catch (err) {
@@ -86,7 +87,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
     setIsLoading(true);
 
     const maxDurationSeconds = duration === '15s' ? 15 : duration === '60s' ? 60 : 180;
-    
+
     const options: CameraOptions = {
       mediaType: 'video' as MediaType,
       videoQuality: 'high',
@@ -97,17 +98,17 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
 
     launchCamera(options, (response) => {
       setIsLoading(false);
-      
+
       if (response.didCancel) {
         console.log('User cancelled camera');
         return;
       }
-      
+
       if (response.errorCode) {
         Alert.alert('Error', response.errorMessage || 'Failed to record video');
         return;
       }
-      
+
       if (response.assets && response.assets[0]) {
         const asset = response.assets[0];
         setPreviewUrl(asset.uri || null);
@@ -120,41 +121,16 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
 
   // Pick video/image from gallery
   const handlePickFromGallery = async () => {
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) {
-      Alert.alert('Permission Denied', 'Storage permission is required to access your media library.');
-      return;
-    }
-
     setIsLoading(true);
+    const videoUri = await videoService.pickVideoFromGallery();
+    setIsLoading(false);
 
-    const options: ImageLibraryOptions = {
-      mediaType: 'mixed' as MediaType, // Allow both photos and videos
-      videoQuality: 'high',
-      selectionLimit: 1,
-    };
-
-    launchImageLibrary(options, (response) => {
-      setIsLoading(false);
-      
-      if (response.didCancel) {
-        console.log('User cancelled image picker');
-        return;
-      }
-      
-      if (response.errorCode) {
-        Alert.alert('Error', response.errorMessage || 'Failed to pick media');
-        return;
-      }
-      
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        setPreviewUrl(asset.uri || null);
-        setThumbnailUrl(asset.uri || null);
-        setIsVideo(asset.type?.startsWith('video') || false);
-        setStep('details');
-      }
-    });
+    if (videoUri) {
+      setPreviewUrl(videoUri);
+      setThumbnailUrl(videoUri);
+      setIsVideo(true);
+      setStep('details');
+    }
   };
 
   // Take a photo
@@ -176,17 +152,17 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
 
     launchCamera(options, (response) => {
       setIsLoading(false);
-      
+
       if (response.didCancel) {
         console.log('User cancelled camera');
         return;
       }
-      
+
       if (response.errorCode) {
         Alert.alert('Error', response.errorMessage || 'Failed to take photo');
         return;
       }
-      
+
       if (response.assets && response.assets[0]) {
         const asset = response.assets[0];
         setPreviewUrl(asset.uri || null);
@@ -214,7 +190,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
       Alert.alert('Error', 'Please select a video or photo first');
       return;
     }
-    
+
     onPost({
       id: Date.now().toString(),
       videoUrl: previewUrl,
@@ -241,13 +217,13 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
 
           {/* Duration Selector for Video Recording */}
           <View style={styles.durationSelector}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setDuration('15s')}
               style={[styles.durationBtn, duration === '15s' && styles.durationBtnActive]}
             >
               <Text style={[styles.durationText, duration === '15s' && styles.durationTextActive]}>15s</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setDuration('60s')}
               style={[styles.durationBtn, duration === '60s' && styles.durationBtnActive]}
             >
@@ -324,16 +300,16 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
               />
               <View style={styles.previewThumbnail}>
                 {isVideo ? (
-                  <Video 
-                    source={{ uri: previewUrl! }} 
-                    style={{ width: '100%', height: '100%' }} 
+                  <Video
+                    source={{ uri: previewUrl! }}
+                    style={{ width: '100%', height: '100%' }}
                     resizeMode="cover"
                     paused={true}
                   />
                 ) : (
-                  <Image 
-                    source={{ uri: thumbnailUrl! }} 
-                    style={{ width: '100%', height: '100%' }} 
+                  <Image
+                    source={{ uri: thumbnailUrl! }}
+                    style={{ width: '100%', height: '100%' }}
                     resizeMode="cover"
                   />
                 )}
@@ -341,7 +317,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost }) => {
             </View>
 
             <View style={styles.wizardSection}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={handleAiCaption}
                 disabled={isGenerating}
                 style={styles.wizardBtn}
