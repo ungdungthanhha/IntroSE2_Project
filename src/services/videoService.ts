@@ -1,14 +1,16 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
 import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
+import { launchImageLibrary, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
+import { PermissionsAndroid, Platform, Alert } from 'react-native';
 
 /**
  * 1. Tải Video lên Cloudinary (Sử dụng Unsigned Upload)
  */
 export const uploadVideoToCloudinary = async (fileUri: string) => {
-  const cloudName = 'dvzhdawxp'; 
-  const uploadPreset = 'tictoc_uploads'; 
-  
+  const cloudName = 'dvzhdawxp';
+  const uploadPreset = 'tictoc_uploads';
+
   const formData = new FormData();
   formData.append('file', {
     uri: fileUri,
@@ -40,7 +42,7 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
 export const saveVideoMetadata = async (videoData: Partial<Video>) => {
   try {
     const newVideoRef = db.collection(COLLECTIONS.VIDEOS).doc();
-    
+
     const finalData = {
       ...videoData,
       id: newVideoRef.id,
@@ -66,7 +68,7 @@ export const getAllVideos = async (): Promise<Video[]> => {
       .collection(COLLECTIONS.VIDEOS)
       .orderBy('createdAt', 'desc')
       .get();
-    
+
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
@@ -87,7 +89,7 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
       .where('ownerUid', '==', userId)
       .orderBy('createdAt', 'desc')
       .get();
-    
+
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
@@ -157,5 +159,58 @@ export const addComment = async (videoId: string, userId: string, userAvatar: st
     return { success: true, comment: newComment }; //
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 7. Chọn Video từ Thư viện
+ */
+export const pickVideoFromGallery = async (): Promise<string | null> => {
+  try {
+    // Yêu cầu quyền truy cập (Dành cho Android)
+    if (Platform.OS === 'android') {
+      const androidVersion = Platform.Version;
+      if (typeof androidVersion === 'number' && androidVersion >= 33) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Quyền truy cập', 'Bạn cần cấp quyền truy cập video để chọn từ thư viện.');
+          return null;
+        }
+      } else {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Quyền truy cập', 'Bạn cần cấp quyền truy cập bộ nhớ để chọn video.');
+          return null;
+        }
+      }
+    }
+
+    const options: ImageLibraryOptions = {
+      mediaType: 'video' as MediaType,
+      selectionLimit: 1,
+      videoQuality: 'high',
+    };
+
+    return new Promise((resolve) => {
+      launchImageLibrary(options, (response) => {
+        if (response.didCancel) {
+          resolve(null);
+        } else if (response.errorCode) {
+          Alert.alert('Lỗi', response.errorMessage || 'Không thể chọn video');
+          resolve(null);
+        } else if (response.assets && response.assets[0]) {
+          resolve(response.assets[0].uri || null);
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Pick Video Error:', error);
+    return null;
   }
 };
