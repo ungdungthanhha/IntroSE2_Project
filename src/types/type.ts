@@ -2,12 +2,15 @@
 export interface User {
   uid: string;
   username: string;
+  displayName: string;
   email: string;
   birthday: string;
   avatarUrl: string;
   bio: string;
   followersCount: number;
   followingCount: number;
+  instagramHandle?: string;
+  youtubeHandle?: string;
 }
 
 export interface Video {
