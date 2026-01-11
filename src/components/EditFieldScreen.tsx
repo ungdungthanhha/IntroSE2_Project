@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  View, Text, StyleSheet, TextInput, TouchableOpacity 
+  View, Text, StyleSheet, TextInput, TouchableOpacity, 
+  StatusBar
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { XCircle } from 'lucide-react-native';
@@ -65,6 +66,7 @@ const EditFieldScreen: React.FC<EditFieldScreenProps> = ({
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel} style={styles.headerBtnLeft}>

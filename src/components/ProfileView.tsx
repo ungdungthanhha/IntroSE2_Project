@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar } from 'react-native';
 // Thêm icon Bookmark
 import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Timer, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal, Bookmark } from 'lucide-react-native';
 import { User, Video } from '../types/type';
@@ -110,6 +110,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* Header - Giống ảnh mẫu */}
       <View style={styles.header}>
         {isOwnProfile ? (

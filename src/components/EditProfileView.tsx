@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, Image, 
   TextInput, ScrollView, Alert, ActivityIndicator, SafeAreaView, Modal, 
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  StatusBar
 } from 'react-native';
 import { ChevronLeft, Camera, ChevronRight, Copy, XCircle } from 'lucide-react-native';
 import { User } from '../types/type';
@@ -214,6 +215,7 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={[styles.headerBtn, { alignItems: 'flex-start' }]}>
