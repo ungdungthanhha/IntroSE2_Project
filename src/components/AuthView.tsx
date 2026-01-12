@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TouchableOpacity, TextInput,
   Alert, SafeAreaView, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform
 } from 'react-native';
-import { ArrowLeft, User, Mail } from 'lucide-react-native'; 
+import { ArrowLeft, User, Mail } from 'lucide-react-native';
 import auth from '@react-native-firebase/auth';
 import * as authService from '../services/authService';
 
@@ -12,13 +12,13 @@ const AuthView = () => {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [viewMode, setViewMode] = useState<'social' | 'phone' | 'email' | 'otp' | 'complete_info'>('social');
-  
+
   const [phoneNumber, setPhoneNumber] = useState('');
   const [confirm, setConfirm] = useState<any>(null);
   const [otpCode, setOtpCode] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [birthday, setBirthday] = useState(''); 
+  const [birthday, setBirthday] = useState('');
   const [password, setPassword] = useState('');
   const [rePassword, setRePassword] = useState('');
 
@@ -31,7 +31,7 @@ const AuthView = () => {
     try {
       const confirmation = await auth().signInWithPhoneNumber(`+84${phoneNumber}`);
       setConfirm(confirmation);
-      setViewMode('otp'); 
+      setViewMode('otp');
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally { setLoading(false); }
@@ -67,11 +67,17 @@ const AuthView = () => {
   const handleEmailLogin = async () => {
     const cleanEmail = email.trim();
     if (!cleanEmail || !password) return Alert.alert('Error', 'Please fill in all fields');
-    
+
     setLoading(true);
     try {
       const result = await authService.loginUser(cleanEmail, password);
-      if (!result.success) Alert.alert('Login Failed', result.error);
+      if (!result.success) {
+        if (result.status === 'requires_verification') {
+          Alert.alert('Verification Sent', result.error);
+        } else {
+          Alert.alert('Login Failed', result.error);
+        }
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally { setLoading(false); }
@@ -81,11 +87,15 @@ const AuthView = () => {
   const handleFinalRegistration = async () => {
     if (password !== rePassword) return Alert.alert('Error', 'Passwords do not match');
     if (!authService.validatePassword(password)) return Alert.alert('Error', 'Password must be at least 6 characters');
-    
+
     setLoading(true);
     // Gọi registerUser với đầy đủ tham số email, pass, username, birthday
     const result = await authService.registerUser(email.trim() || phoneNumber, password, username, birthday);
-    if (!result.success) Alert.alert('Error', result.error);
+    if (!result.success) {
+      Alert.alert('Error', result.error);
+    } else {
+      Alert.alert('Success', 'Account created! We have sent a verification email to your inbox. Please verify it.');
+    }
     setLoading(false);
   };
 
@@ -107,7 +117,7 @@ const AuthView = () => {
             <ActivityIndicator size="large" color="#FE2C55" />
           </View>
         )}
-        
+
         <ScrollView contentContainerStyle={styles.content}>
           {viewMode !== 'social' && (
             <TouchableOpacity onPress={() => setViewMode('social')} style={styles.backBtn}>
@@ -127,15 +137,15 @@ const AuthView = () => {
           {/* MÀN HÌNH CHỌN PHƯƠNG THỨC (SOCIAL) */}
           {viewMode === 'social' && (
             <View style={styles.btnList}>
-              <SocialButton 
-                title={isSignUp ? "Continue with phone / email" : "Use phone / email / username"} 
-                icon={<User color="#000" size={20}/>} 
-                isCustomIcon 
-                onPress={() => setViewMode('phone')} 
+              <SocialButton
+                title={isSignUp ? "Continue with phone / email" : "Use phone / email / username"}
+                icon={<User color="#000" size={20} />}
+                isCustomIcon
+                onPress={() => setViewMode('phone')}
               />
               <SocialButton title="Continue with Google" icon="G" color="#4285F4" onPress={() => authService.loginWithGoogle()} />
-              <SocialButton title="Continue with Apple" icon="" color="#000" onPress={() => {}} />
-              <SocialButton title="Continue with Facebook" icon="f" color="#1877F2" onPress={() => {}} />
+              <SocialButton title="Continue with Apple" icon="" color="#000" onPress={() => { }} />
+              <SocialButton title="Continue with Facebook" icon="f" color="#1877F2" onPress={() => { }} />
             </View>
           )}
 
@@ -170,8 +180,8 @@ const AuthView = () => {
                   </>
                 )}
 
-                <TouchableOpacity 
-                  style={styles.mainBtn} 
+                <TouchableOpacity
+                  style={styles.mainBtn}
                   onPress={viewMode === 'phone' ? handlePhoneAuth : handleEmailNextStep}
                 >
                   <Text style={styles.mainBtnText}>
@@ -198,16 +208,16 @@ const AuthView = () => {
             <View style={styles.form}>
               <Text style={styles.inputLabel}>Username</Text>
               <TextInput style={styles.input} placeholder="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
-              
+
               <Text style={styles.inputLabel}>Birthday</Text>
               <TextInput style={styles.input} placeholder="DD/MM/YYYY" value={birthday} onChangeText={setBirthday} />
-              
+
               <Text style={styles.inputLabel}>Password</Text>
               <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
-              
+
               <Text style={styles.inputLabel}>Confirm Password</Text>
               <TextInput style={styles.input} placeholder="Confirm Password" secureTextEntry value={rePassword} onChangeText={setRePassword} />
-              
+
               <TouchableOpacity style={styles.mainBtn} onPress={handleFinalRegistration}>
                 <Text style={styles.mainBtnText}>Complete Sign up</Text>
               </TouchableOpacity>

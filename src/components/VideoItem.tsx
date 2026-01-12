@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, memo } from 'react'; // Thêm memo để tối ưu
-import { 
-  View, Text, StyleSheet, Dimensions, Image, 
+import {
+  View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable 
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable
 } from 'react-native';
 import Video from 'react-native-video';
-import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send } from 'lucide-react-native';
+import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play } from 'lucide-react-native';
 import { Video as VideoType, User } from '../types/type';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
@@ -13,11 +13,12 @@ const { width: WINDOW_WIDTH } = Dimensions.get('window');
 interface VideoItemProps {
   video: VideoType;
   isActive: boolean;
+  shouldLoad: boolean; // Add prop
   onViewProfile?: (user: User) => void;
-  itemHeight: number; // Chiều cao chuẩn từ App.tsx
+  itemHeight: number;
 }
 
-const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile, itemHeight }) => {
+const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight }) => {
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -28,6 +29,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile, i
   }, []);
 
   const [progress, setProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false); // Local pause state
   const [isLiked, setIsLiked] = useState(video.isLiked || false);
   const [isSaved, setIsSaved] = useState(video.isSaved || false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -52,6 +54,28 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile, i
     }
   }, [isActive]);
 
+  // RESET PAUSE STATE WHEN SCROLLED
+  useEffect(() => {
+    if (isActive) {
+      setIsPaused(false);
+    }
+  }, [isActive]);
+
+  const togglePause = () => {
+    setIsPaused(!isPaused);
+    // Animation control for disc if needed, but handled by isActive primarily.
+    // If we want the disc to stop spinning when paused manually:
+    if (!isPaused) { // Going to pause
+      rotateAnim.stopAnimation();
+    } else { // Resuming
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1, duration: 3000, easing: Easing.linear, useNativeDriver: true,
+        })
+      ).start();
+    }
+  };
+
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -69,24 +93,26 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile, i
 
   // Tạo link ảnh poster từ link Cloudinary
   const posterUrl = video.videoUrl?.replace(".mp4", ".jpg");
+  // ...
 
   return (
     <View style={[styles.container, { height: itemHeight }]}>
-      
+
       {/* 4. CHỐNG VĂNG APP & DÍNH TIẾNG (RENDER ĐIỀU KIỆN) */}
-      {isActive ? (
+      {/* Mount video if active OR in preload window */}
+      {shouldLoad ? (
         <Video
           source={{ uri: video.videoUrl }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover" // Tràn viền dọc khít màn hình
           repeat={true}
-          paused={!isActive}
+          paused={!isActive || isPaused}
           playInBackground={false}
           playWhenInactive={false}
           onProgress={handleProgress}
-          
+
           // Giảm tải cho máy thật Android
-          progressUpdateInterval={1000} 
+          progressUpdateInterval={1000}
           bufferConfig={{
             minBufferMs: 15000,
             maxBufferMs: 30000,
@@ -98,30 +124,38 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile, i
         />
       ) : (
         /* Hiện ảnh Poster khi không Active để giải phóng RAM */
-        <Image 
-          source={{ uri: posterUrl }} 
-          style={StyleSheet.absoluteFill} 
-          resizeMode="cover" 
+        <Image
+          source={{ uri: posterUrl }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
         />
       )}
-      
+
       {/* OVERLAY TƯƠNG TÁC (Sidebar và Info) */}
       <View style={styles.overlay} pointerEvents="box-none">
-        
+        {/* LỚP TAP BACKGROUND (Nằm dưới các nút, trên video) */}
+        <Pressable onPress={togglePause} style={StyleSheet.absoluteFill}>
+          {isPaused && (
+            <View style={styles.playIconContainer}>
+              <Play size={60} color="rgba(255, 255, 255, 0.6)" fill="rgba(255, 255, 255, 0.6)" />
+            </View>
+          )}
+        </Pressable>
+
         {/* SIDEBAR NÚT BẤM (Phải) */}
         <View style={styles.rightActions} pointerEvents="box-none">
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.avatarContainer}
-            onPress={() => onViewProfile && onViewProfile({ 
-              uid: video.ownerUid, username: video.ownerName, avatarUrl: video.ownerAvatar 
+            onPress={() => onViewProfile && onViewProfile({
+              uid: video.ownerUid, username: video.ownerName, avatarUrl: video.ownerAvatar
             } as User)}
           >
             <Image source={{ uri: video.ownerAvatar }} style={styles.avatar} />
-            <Pressable 
-              onPress={(e) => { e.stopPropagation(); setIsFollowing(!isFollowing); }} 
-              style={[styles.plusIcon, isFollowing && {backgroundColor: '#fff'}]}
+            <Pressable
+              onPress={(e) => { e.stopPropagation(); setIsFollowing(!isFollowing); }}
+              style={[styles.plusIcon, isFollowing && { backgroundColor: '#fff' }]}
             >
-               <Plus size={12} color={isFollowing ? "#fe2c55" : "#fff"} strokeWidth={4} />
+              <Plus size={12} color={isFollowing ? "#fe2c55" : "#fff"} strokeWidth={4} />
             </Pressable>
           </TouchableOpacity>
 
@@ -193,7 +227,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, onViewProfile, i
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.commentInputBar}>
               <TextInput style={styles.commentInput} placeholder="Add comment..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} />
-              <TouchableOpacity onPress={() => { if(commentText.trim()) { setComments([{id: Date.now().toString(), user: 'Me', text: commentText, likes: 0}, ...comments]); setCommentText(''); }}}>
+              <TouchableOpacity onPress={() => { if (commentText.trim()) { setComments([{ id: Date.now().toString(), user: 'Me', text: commentText, likes: 0 }, ...comments]); setCommentText(''); } }}>
                 <Send size={20} color={commentText ? "#fe2c55" : "#ccc"} />
               </TouchableOpacity>
             </View>
@@ -232,7 +266,8 @@ const styles = StyleSheet.create({
   commentUser: { fontWeight: '700', fontSize: 12, color: '#888', marginBottom: 4 },
   commentMsg: { fontSize: 14, color: '#111' },
   commentInputBar: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 0.5, borderTopColor: '#eee', paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
-  commentInput: { flex: 1, backgroundColor: '#f1f1f2', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10, color: '#000' }
+  commentInput: { flex: 1, backgroundColor: '#f1f1f2', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10, color: '#000' },
+  playIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 }
 });
 
 // QUAN TRỌNG: Sử dụng memo để không re-render nhầm
