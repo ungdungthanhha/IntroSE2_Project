@@ -2,11 +2,13 @@ import React, { useState, useRef, useEffect, memo } from 'react'; // Thêm memo 
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, ActivityIndicator, Modal, Share
 } from 'react-native';
 import Video from 'react-native-video';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play } from 'lucide-react-native';
-import { Video as VideoType, User } from '../types/type';
+import { Video as VideoType, User, Comment } from '../types/type';
+import * as videoService from '../services/videoService';
+import { firebaseAuth } from '../config/firebase';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -31,14 +33,22 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false); // Local pause state
   const [isLiked, setIsLiked] = useState(video.isLiked || false);
+  const [likesCount, setLikesCount] = useState(video.likesCount || 0);
   const [isSaved, setIsSaved] = useState(video.isSaved || false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState([
-    { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
-    { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
-  ]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsCount, setCommentsCount] = useState(video.commentsCount || 0);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+
+  // Đồng bộ lại trạng thái khi video prop thay đổi (khi lướt feed)
+  useEffect(() => {
+    setLikesCount(video.likesCount || 0);
+    setIsLiked(video.isLiked || false);
+    setCommentsCount(video.commentsCount || 0);
+  }, [video]);
 
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
@@ -91,8 +101,122 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     }
   };
 
+  // Kiểm tra trạng thái like từ Firestore để tránh cộng trùng
+  useEffect(() => {
+    let active = true;
+    const uid = firebaseAuth.currentUser?.uid;
+    if (!uid || !shouldLoad) return;
+
+    videoService.isVideoLikedByUser(video.id, uid).then((liked) => {
+      if (active) {
+        setIsLiked(liked);
+      }
+    });
+
+    return () => { active = false; };
+  }, [video.id, shouldLoad]);
+
+  const handleToggleLike = async () => {
+    const uid = firebaseAuth.currentUser?.uid;
+    if (!uid) {
+      return;
+    }
+
+    const prevLiked = isLiked;
+    const delta = prevLiked ? -1 : 1;
+
+    // Optimistic update: UI trước, rollback nếu lỗi
+    setIsLiked(!prevLiked);
+    setLikesCount((prev) => Math.max(0, prev + delta));
+
+    const res = await videoService.toggleLikeVideo(video.id, uid, prevLiked);
+    if (!res.success) {
+      setIsLiked(prevLiked);
+      setLikesCount((prev) => Math.max(0, prev - delta));
+    }
+  };
+
+  // Load comments khi mở bảng bình luận
+  const handleOpenComments = async () => {
+    setShowComments(true);
+    if (comments.length === 0) {
+      setLoadingComments(true);
+      const fetchedComments = await videoService.getComments(video.id);
+      setComments(fetchedComments);
+      setLoadingComments(false);
+    }
+  };
+
+  // Thêm bình luận mới
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+
+    const uid = firebaseAuth.currentUser?.uid;
+    if (!uid) return;
+
+    const user = firebaseAuth.currentUser;
+    const username = user?.displayName || 'Anonymous';
+    const avatarUrl = user?.photoURL || 'https://picsum.photos/200';
+
+    // Optimistic update
+    const tempComment: Comment = {
+      id: Date.now().toString(),
+      videoId: video.id,
+      userUid: uid,
+      username,
+      avatarUrl,
+      text: commentText.trim(),
+      timestamp: Date.now()
+    };
+
+    setComments([tempComment, ...comments]);
+    setCommentsCount((prev) => prev + 1);
+    setCommentText('');
+
+    // Lưu vào Firestore
+    const result = await videoService.addComment(
+      video.id,
+      uid,
+      avatarUrl,
+      username,
+      commentText.trim()
+    );
+
+    if (result.success && result.comment) {
+      // Cập nhật comment với ID thật từ Firestore
+      setComments((prev) => 
+        prev.map((c) => (c.id === tempComment.id ? result.comment! : c))
+      );
+    } else {
+      // Rollback nếu thất bại
+      setComments((prev) => prev.filter((c) => c.id !== tempComment.id));
+      setCommentsCount((prev) => Math.max(0, prev - 1));
+    }
+  };
+
   // Tạo link ảnh poster từ link Cloudinary
   const posterUrl = video.videoUrl?.replace(".mp4", ".jpg");
+  const shareLink = video.videoUrl || `https://tictoc.app/video/${video.id}`;
+  const shareOptions = [
+    'Messenger',
+    'WhatsApp',
+    'Facebook',
+    'Telegram',
+    'More'
+  ];
+
+  const handleShare = async (platform?: string) => {
+    const prefix = platform ? `${platform}: ` : '';
+    try {
+      await Share.share({
+        message: `${prefix}${shareLink}`,
+        url: shareLink,
+        title: 'Share video'
+      });
+    } catch (error) {
+      // swallow share errors
+    }
+  };
   // ...
 
   return (
@@ -159,16 +283,19 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             </Pressable>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action} onPress={() => setIsLiked(!isLiked)}>
+          <TouchableOpacity
+            style={styles.action}
+            onPress={handleToggleLike}
+          >
             <Heart size={35} color={isLiked ? "#fe2c55" : "#fff"} fill={isLiked ? "#fe2c55" : "none"} />
             <Text style={styles.actionText}>
-              {(video.likesCount + (isLiked ? 1 : 0)).toLocaleString()}
+              {likesCount.toLocaleString()}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action} onPress={() => setShowComments(true)}>
+          <TouchableOpacity style={styles.action} onPress={handleOpenComments}>
             <MessageCircle size={35} color="#fff" />
-            <Text style={styles.actionText}>{video.commentsCount}</Text>
+            <Text style={styles.actionText}>{commentsCount.toLocaleString()}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.action} onPress={() => setIsSaved(!isSaved)}>
@@ -178,7 +305,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action}>
+          <TouchableOpacity style={styles.action} onPress={() => setShowShare(true)}>
             <Share2 size={35} color="#fff" />
             <Text style={styles.actionText}>Share</Text>
           </TouchableOpacity>
@@ -208,32 +335,80 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
       {showComments && (
         <View style={styles.commentSheet}>
           <View style={styles.commentHeader}>
-            <Text style={styles.commentTitle}>{comments.length} comments</Text>
+            <Text style={styles.commentTitle}>{commentsCount} comments</Text>
             <TouchableOpacity onPress={() => setShowComments(false)}>
               <X size={20} color="#000" />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.commentList} showsVerticalScrollIndicator={false}>
-            {comments.map(c => (
-              <View key={c.id} style={styles.commentItem}>
-                <Image source={{ uri: `https://picsum.photos/seed/${c.user}/100/100` }} style={styles.commentAvatar} />
-                <View style={styles.commentContent}>
-                  <Text style={styles.commentUser}>{c.user}</Text>
-                  <Text style={styles.commentMsg}>{c.text}</Text>
+          {loadingComments ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#fe2c55" />
+            </View>
+          ) : (
+            <ScrollView style={styles.commentList} showsVerticalScrollIndicator={false}>
+              {comments.map(c => (
+                <View key={c.id} style={styles.commentItem}>
+                  <Image source={{ uri: c.avatarUrl }} style={styles.commentAvatar} />
+                  <View style={styles.commentContent}>
+                    <Text style={styles.commentUser}>{c.username}</Text>
+                    <Text style={styles.commentMsg}>{c.text}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </ScrollView>
+              ))}
+            </ScrollView>
+          )}
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.commentInputBar}>
-              <TextInput style={styles.commentInput} placeholder="Add comment..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} />
-              <TouchableOpacity onPress={() => { if (commentText.trim()) { setComments([{ id: Date.now().toString(), user: 'Me', text: commentText, likes: 0 }, ...comments]); setCommentText(''); } }}>
+              <TextInput 
+                style={styles.commentInput} 
+                placeholder="Add comment..." 
+                placeholderTextColor="#999" 
+                value={commentText} 
+                onChangeText={setCommentText}
+                onSubmitEditing={handleAddComment}
+              />
+              <TouchableOpacity onPress={handleAddComment}>
                 <Send size={20} color={commentText ? "#fe2c55" : "#ccc"} />
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
         </View>
       )}
+
+      {/* SHARE SHEET */}
+      <Modal visible={showShare} transparent animationType="fade" onRequestClose={() => setShowShare(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowShare(false)}>
+          <View style={styles.shareSheet}>
+            <View style={styles.shareHeader}>
+              <Text style={styles.shareTitle}>Share video</Text>
+              <TouchableOpacity onPress={() => setShowShare(false)}>
+                <X size={20} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.shareLinkBox}>
+              <Text style={styles.shareLabel}>Video link</Text>
+              <View style={styles.shareLinkRow}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <Text style={styles.shareLinkText}>{shareLink}</Text>
+                </ScrollView>
+                <TouchableOpacity style={styles.shareCopyBtn} onPress={() => handleShare('Copy link')}>
+                  <Text style={styles.shareCopyText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.shareTargets}>
+              <Text style={styles.shareLabel}>Share with</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shareButtonsRow}>
+                {shareOptions.map((opt) => (
+                  <TouchableOpacity key={opt} style={styles.shareTargetBtn} onPress={() => handleShare(opt)}>
+                    <Text style={styles.shareTargetText}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -267,7 +442,22 @@ const styles = StyleSheet.create({
   commentMsg: { fontSize: 14, color: '#111' },
   commentInputBar: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 0.5, borderTopColor: '#eee', paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
   commentInput: { flex: 1, backgroundColor: '#f1f1f2', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10, color: '#000' },
-  playIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 }
+  playIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  shareSheet: { backgroundColor: '#fff', padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  shareHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  shareTitle: { fontSize: 16, fontWeight: '700', color: '#000' },
+  shareLinkBox: { marginBottom: 12 },
+  shareLabel: { fontSize: 13, color: '#555', marginBottom: 6 },
+  shareLinkRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f4f4f5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  shareLinkText: { color: '#111', fontSize: 13, paddingRight: 10 },
+  shareCopyBtn: { backgroundColor: '#fe2c55', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  shareCopyText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  shareTargets: { marginTop: 8 },
+  shareButtonsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  shareTargetBtn: { backgroundColor: '#f4f4f5', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginRight: 8 },
+  shareTargetText: { color: '#000', fontWeight: '700', fontSize: 13 }
 });
 
 // QUAN TRỌNG: Sử dụng memo để không re-render nhầm

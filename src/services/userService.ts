@@ -1,5 +1,6 @@
-import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
+import { db, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
+import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 
 
@@ -49,7 +50,7 @@ export const isFollowing = async (currentUserId: string, targetUserId: string): 
     const followDoc = await db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection('following')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
       .doc(targetUserId)
       .get();
     
@@ -75,7 +76,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection('following')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
       .doc(targetUserId);
     
     batch.set(followingRef, {
@@ -87,7 +88,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
-      .collection('followers')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWERS)
       .doc(currentUserId);
     
     batch.set(followersRef, {
@@ -95,24 +96,16 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       followedAt: new Date().toISOString()
     });
 
-    // 3. Cập nhật số lượng Follower/Following
+    // 3. Cập nhật số lượng Follower/Following (atomic increment)
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    const [currentUserDoc, targetUserDoc] = await Promise.all([
-      currentUserRef.get(),
-      targetUserRef.get()
-    ]);
-
-    const currentUserData = currentUserDoc.data();
-    const targetUserData = targetUserDoc.data();
-
     batch.update(currentUserRef, {
-      followingCount: (currentUserData?.followingCount || 0) + 1
+      followingCount: firestore.FieldValue.increment(1)
     });
 
     batch.update(targetUserRef, {
-      followersCount: (targetUserData?.followersCount || 0) + 1
+      followersCount: firestore.FieldValue.increment(1)
     });
 
     await batch.commit();
@@ -133,34 +126,26 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection('following')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
       .doc(targetUserId);
     batch.delete(followingRef);
 
     const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
-      .collection('followers')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWERS)
       .doc(currentUserId);
     batch.delete(followersRef);
 
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    const [currentUserDoc, targetUserDoc] = await Promise.all([
-      currentUserRef.get(),
-      targetUserRef.get()
-    ]);
-
-    const currentUserData = currentUserDoc.data();
-    const targetUserData = targetUserDoc.data();
-
     batch.update(currentUserRef, {
-      followingCount: Math.max(0, (currentUserData?.followingCount || 1) - 1)
+      followingCount: firestore.FieldValue.increment(-1)
     });
 
     batch.update(targetUserRef, {
-      followersCount: Math.max(0, (targetUserData?.followersCount || 1) - 1)
+      followersCount: firestore.FieldValue.increment(-1)
     });
 
     await batch.commit();
@@ -226,4 +211,31 @@ export const updateUserProfile = async (
     console.error('Error updating profile:', error);
     return { success: false, error: error.message };
   }
+};
+
+/**
+ * Subscribe to realtime user updates (bao gồm likesCount)
+ */
+export const subscribeToUserUpdates = (
+  userId: string,
+  callback: (user: User | null) => void
+): (() => void) => {
+  const unsubscribe = db
+    .collection(COLLECTIONS.USERS)
+    .doc(userId)
+    .onSnapshot(
+      (snapshot) => {
+        if (snapshot.exists) {
+          callback(snapshot.data() as User);
+        } else {
+          callback(null);
+        }
+      },
+      (error) => {
+        console.error('Error subscribing to user updates:', error);
+        callback(null);
+      }
+    );
+
+  return unsubscribe;
 };
