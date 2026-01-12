@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar } from 'react-native';
 // Thêm icon Bookmark
 import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Timer, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal, Bookmark } from 'lucide-react-native';
 import { User, Video } from '../types/type';
 import * as authService from '../services/authService';
 import * as userService from '../services/userService';
+import EditProfileView from './EditProfileView';
 import TimeLimitModal from './TimeLimitModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const COL_WIDTH = width / 3;
@@ -20,29 +22,51 @@ interface ProfileViewProps {
 }
 
 const ProfileView: React.FC<ProfileViewProps> = ({ 
-  user, 
+  user: initialUser,
   userVideos, 
   currentUserId,
   isOwnProfile = true,
   onBack,
   onMessage 
 }) => {
+  const [currentUserData, setCurrentUserData] = useState(initialUser);
+  const [isEditing, setIsEditing] = useState(false);
   const [showTimeLimitModal, setShowTimeLimitModal] = useState(false);
   const [activeTab, setActiveTab] = useState('videos');
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
-  const [followerCount, setFollowerCount] = useState(user.followersCount);
+  const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
+  const insets = useSafeAreaInsets();
   
   useEffect(() => {
     if (!isOwnProfile && currentUserId) {
       checkFollowStatus();
     }
-  }, [user.uid, currentUserId, isOwnProfile]);
+  }, [initialUser.uid, currentUserId, isOwnProfile]);
+
+  useEffect(() => {
+    setCurrentUserData(initialUser);
+    setFollowerCount(initialUser.followersCount);
+  }, [initialUser]);
+
+  const handleUpdateSuccess = (updatedUser: User) => {
+    setCurrentUserData(updatedUser);
+  };
+
+  if (isEditing) {
+    return (
+      <EditProfileView 
+        user={currentUserData} 
+        onClose={() => setIsEditing(false)} 
+        onUpdateSuccess={handleUpdateSuccess}
+      />
+    );
+  }
 
   const checkFollowStatus = async () => {
     if (!currentUserId) return;
     try {
-      const status = await userService.isFollowing(currentUserId, user.uid);
+      const status = await userService.isFollowing(currentUserId, currentUserData.uid);
       setIsFollowing(status);
     } catch (error) {
       console.error('Error checking follow status:', error);
@@ -54,11 +78,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     setFollowLoading(true);
     try {
       if (isFollowing) {
-        await userService.unfollowUser(currentUserId, user.uid);
+        await userService.unfollowUser(currentUserId, currentUserData.uid);
         setIsFollowing(false);
         setFollowerCount(prev => Math.max(0, prev - 1));
       } else {
-        await userService.followUser(currentUserId, user.uid);
+        await userService.followUser(currentUserId, currentUserData.uid);
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
       }
@@ -70,11 +94,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleMessage = () => {
-    if (onMessage) onMessage(user);
+    if (onMessage) onMessage(currentUserData);
   };
 
   const handleShare = () => {
-    Alert.alert('Share Profile', `Share @${user.username}'s profile`);
+    Alert.alert('Share Profile', `Share @${currentUserData.username}'s profile`);
   };
   
   const handleLogout = async () => {
@@ -85,7 +109,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* Header - Giống ảnh mẫu */}
       <View style={styles.header}>
         {isOwnProfile ? (
@@ -100,7 +125,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
         <View style={styles.titleWrap}>
           {/* Tên hiển thị ở giữa + icon mũi tên xuống */}
-          <Text style={styles.username}>{user.username || "Jacob West"}</Text>
+          <Text style={styles.username}>{currentUserData.displayName || currentUserData.username}</Text>
           <ChevronDown size={14} color="#000" style={{ marginTop: 2 }} />
         </View>
 
@@ -132,15 +157,15 @@ const ProfileView: React.FC<ProfileViewProps> = ({
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.profileInfo}>
           <View style={styles.avatarContainer}>
-            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+            <Image source={{ uri: currentUserData.avatarUrl }} style={styles.avatar} />
           </View>
-          
-          <Text style={styles.handle}>@{user.username || "jacob_w"}</Text>
-          
+
+          <Text style={styles.handle}>@{currentUserData.username || "jacob_w"}</Text>
+
           {/* Stats Section */}
           <View style={styles.stats}>
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>{user.followingCount || 14}</Text>
+              <Text style={styles.statVal}>{currentUserData.followingCount || 14}</Text>
               <Text style={styles.statLab}>Following</Text>
             </TouchableOpacity>
             <View style={styles.divider} />
@@ -159,7 +184,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           <View style={styles.actions}>
             {isOwnProfile ? (
               <>
-                <TouchableOpacity style={styles.editBtn}>
+                <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
                   <Text style={styles.editBtnText}>Edit profile</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.bookmarkBtn}>
@@ -194,7 +219,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </View>
 
-          <Text style={styles.bio}>{user.bio || "Tap to add bio"}</Text>
+          <Text style={styles.bio}>{currentUserData.bio || "Tap to add bio"}</Text>
         </View>
 
         {/* Tabs Navigation */}
@@ -262,12 +287,23 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 10,
     borderBottomWidth: 0.5, 
-    borderBottomColor: '#e0e0e0' 
+    borderBottomColor: '#e0e0e0' ,
+    position: 'relative',
   },
-  headerIconLeft: { minWidth: 40 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', minWidth: 40, justifyContent: 'flex-end', gap: 15 },
+  headerIconLeft: { minWidth: 40, zIndex: 1, },
+  headerRight: { flexDirection: 'row', alignItems: 'center', minWidth: 40, justifyContent: 'flex-end', gap: 15, zIndex: 1, },
   headerIcon: { padding: 2 },
-  titleWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  titleWrap: { 
+    // 2. Sửa lại hoàn toàn đoạn này
+    position: 'absolute', // Tách ra khỏi dòng chảy layout bình thường
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0, // Căng full 4 góc của header
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', // Căn giữa tuyệt đối
+  },
   username: { fontSize: 17, fontWeight: '700', marginRight: 4, color: '#000' },
   
   profileInfo: { alignItems: 'center', paddingTop: 20, paddingBottom: 10 },

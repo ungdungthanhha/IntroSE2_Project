@@ -196,7 +196,7 @@ export const searchUsers = async (query: string): Promise<User[]> => {
  */
 export const updateUserProfile = async (
   userId: string, 
-  updates: Partial<Pick<User, 'username' | 'bio' | 'avatarUrl'>>
+  updates: Partial<Pick<User, 'username' | 'displayName' | 'bio' | 'avatarUrl' | 'instagramHandle' | 'youtubeHandle'>>
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     await db.collection(COLLECTIONS.USERS).doc(userId).update(updates);
