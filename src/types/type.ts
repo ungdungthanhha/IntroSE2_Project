@@ -31,6 +31,7 @@ export interface Video {
   timestamp: number;
   isLiked?: boolean;
   isSaved?: boolean;
+  thumbUrl?: string;
 }
 
 export interface Comment {

@@ -65,7 +65,7 @@ const EditFieldScreen: React.FC<EditFieldScreenProps> = ({
   const canSave = text.trim().length > 0 && text !== initialValue;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 10}]}>
         <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* HEADER */}
       <View style={styles.header}>
