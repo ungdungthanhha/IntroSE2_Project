@@ -1,6 +1,6 @@
-import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
+import { db, firebaseStorage, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase';
 import { User } from '../types/type';
-import storage from '@react-native-firebase/storage';
+import firestore from '@react-native-firebase/firestore';
 
 
 /**
@@ -99,21 +99,14 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    const [currentUserDoc, targetUserDoc] = await Promise.all([
-      currentUserRef.get(),
-      targetUserRef.get()
-    ]);
+    // Sử dụng set với merge để tự động tạo field nếu chưa tồn tại
+    batch.set(currentUserRef, {
+      followingCount: firestore.FieldValue.increment(1)
+    }, { merge: true });
 
-    const currentUserData = currentUserDoc.data();
-    const targetUserData = targetUserDoc.data();
-
-    batch.update(currentUserRef, {
-      followingCount: (currentUserData?.followingCount || 0) + 1
-    });
-
-    batch.update(targetUserRef, {
-      followersCount: (targetUserData?.followersCount || 0) + 1
-    });
+    batch.set(targetUserRef, {
+      followersCount: firestore.FieldValue.increment(1)
+    }, { merge: true });
 
     await batch.commit();
     return { success: true };
@@ -147,21 +140,14 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    const [currentUserDoc, targetUserDoc] = await Promise.all([
-      currentUserRef.get(),
-      targetUserRef.get()
-    ]);
+    // Sử dụng set với merge để tự động tạo field nếu chưa tồn tại
+    batch.set(currentUserRef, {
+      followingCount: firestore.FieldValue.increment(-1)
+    }, { merge: true });
 
-    const currentUserData = currentUserDoc.data();
-    const targetUserData = targetUserDoc.data();
-
-    batch.update(currentUserRef, {
-      followingCount: Math.max(0, (currentUserData?.followingCount || 1) - 1)
-    });
-
-    batch.update(targetUserRef, {
-      followersCount: Math.max(0, (targetUserData?.followersCount || 1) - 1)
-    });
+    batch.set(targetUserRef, {
+      followersCount: firestore.FieldValue.increment(-1)
+    }, { merge: true });
 
     await batch.commit();
     return { success: true };
@@ -197,7 +183,7 @@ export const uploadUserAvatar = async (userId: string, imageUri: string): Promis
     // 1. Tạo tên file duy nhất (dựa trên UserID và thời gian)
     // Đường dẫn trên Storage sẽ là: avatars/user_id/avatar_timestamp.jpg
     const filename = `avatars/${userId}/avatar_${Date.now()}.jpg`;
-    const reference = storage().ref(filename);
+    const reference = firebaseStorage.ref(filename);
 
     // 2. Thực hiện upload
     // Lưu ý: putFile nhận đường dẫn file local
@@ -225,5 +211,47 @@ export const updateUserProfile = async (
   } catch (error: any) {
     console.error('Error updating profile:', error);
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Subscribe to realtime user updates (bao gồm likesCount)
+ */
+export const subscribeToUserUpdates = (
+  userId: string,
+  callback: (user: User | null) => void
+): (() => void) => {
+  const unsubscribe = db
+    .collection(COLLECTIONS.USERS)
+    .doc(userId)
+    .onSnapshot(
+      (snapshot) => {
+        if (snapshot.exists) {
+          callback(snapshot.data() as User);
+        } else {
+          callback(null);
+        }
+      },
+      (error) => {
+        console.error('Error subscribing to user updates:', error);
+        callback(null);
+      }
+    );
+
+  return unsubscribe;
+};
+
+/**
+ * Ensure user has followersCount and followingCount fields
+ */
+export const ensureFollowCountFields = async (userId: string): Promise<void> => {
+  try {
+    const userRef = db.collection(COLLECTIONS.USERS).doc(userId);
+    await userRef.set({
+      followersCount: 0,
+      followingCount: 0
+    }, { merge: true });
+  } catch (error) {
+    console.error('Error ensuring follow count fields:', error);
   }
 };

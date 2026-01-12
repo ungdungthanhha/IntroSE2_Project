@@ -247,7 +247,6 @@ const AppContent = () => {
                   />
                 )}
               </View>
-
               {!isInChatDetail && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
                 <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
               )}
@@ -261,6 +260,7 @@ const AppContent = () => {
                <ProfileView
                  user={viewingProfile}
                  isOwnProfile={false}
+                 currentUserId={currentUser.uid}
                  onBack={() => {
                    // Khi bấm Back ở Profile:
                    // Chỉ tắt Profile đi -> Lộ ra lớp bên dưới (Video Detail hoặc Discovery)
