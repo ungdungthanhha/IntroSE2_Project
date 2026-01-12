@@ -8,7 +8,7 @@ import { PermissionsAndroid, Platform, Alert } from 'react-native';
  * 1. Tải Video lên Cloudinary (Sử dụng Unsigned Upload)
  */
 export const uploadVideoToCloudinary = async (fileUri: string) => {
-  const cloudName = 'dvzhdawxp';
+  const cloudName = 'dvmfpcxz8';
   const uploadPreset = 'tictoc_uploads';
 
   const formData = new FormData();

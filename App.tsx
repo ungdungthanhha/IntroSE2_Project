@@ -60,6 +60,7 @@ const AppContent = () => {
         const newUser: User = {
           uid: user.uid,
           username: (user.displayName || 'user').replace(/\s/g, '').toLowerCase(),
+          displayName: user.displayName || 'User', // ADDED
           email: user.email || '',
           birthday: '',
           avatarUrl: user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`,
