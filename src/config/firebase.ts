@@ -10,11 +10,3 @@ export const COLLECTIONS = {
   CHATS: 'chats',
   LIVESTREAMS: 'livestreams',
 };
-
-// Tập trung tên các sub-collection để tránh viết tay rải rác
-export const SUBCOLLECTIONS = {
-  USER_FOLLOWERS: 'followers',
-  USER_FOLLOWING: 'following',
-  VIDEO_LIKES: 'likes',
-  VIDEO_COMMENTS: 'comments',
-};

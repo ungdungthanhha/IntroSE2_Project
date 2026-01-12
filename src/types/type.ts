@@ -9,11 +9,6 @@ export interface User {
   bio: string;
   followersCount: number;
   followingCount: number;
-  /**
-   * Tổng số lượt thích nhận được từ các video của người dùng.
-   * Có thể chưa tồn tại trên các hồ sơ cũ, nên để tùy chọn.
-   */
-  likesCount?: number;
   instagramHandle?: string;
   youtubeHandle?: string;
 }

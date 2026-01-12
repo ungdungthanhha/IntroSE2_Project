@@ -247,21 +247,6 @@ const AppContent = () => {
                 )}
               </View>
 
-            {/* CÁC TAB KHÁC THEO LOGIC CỦA APP */}
-            {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} />}
-            {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); setActiveTab(AppTab.HOME); }} />}
-            {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} />}
-
-            {(activeTab === AppTab.PROFILE || viewingProfile) && currentUser && (
-              <ProfileView
-                user={viewingProfile || currentUser}
-                isOwnProfile={!viewingProfile}
-                currentUserId={currentUser.uid}
-                onBack={() => { setViewingProfile(null); setActiveTab(AppTab.HOME); }} 
-                userVideos={[]} 
-              />
-            )}
-          </View>
               {!isInChatDetail && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
                 <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
               )}
