@@ -38,6 +38,17 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
   const insets = useSafeAreaInsets();
   
+  // Ensure follow count fields exist on mount
+  useEffect(() => {
+    const ensureFields = async () => {
+      await userService.ensureFollowCountFields(initialUser.uid);
+      if (currentUserId && currentUserId !== initialUser.uid) {
+        await userService.ensureFollowCountFields(currentUserId);
+      }
+    };
+    ensureFields();
+  }, [initialUser.uid, currentUserId]);
+  
   // Realtime sync user data từ Firestore (bao gồm likesCount, followersCount)
   useEffect(() => {
     const unsubscribe = userService.subscribeToUserUpdates(
@@ -104,20 +115,33 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleFollowToggle = async () => {
-    if (!currentUserId) return;
+    if (!currentUserId) {
+      console.log('No currentUserId');
+      return;
+    }
     setFollowLoading(true);
     try {
+      console.log(`Attempting to ${isFollowing ? 'unfollow' : 'follow'} user:`, currentUserData.uid);
       if (isFollowing) {
-        await userService.unfollowUser(currentUserId, currentUserData.uid);
-        setIsFollowing(false);
-        // Không cần optimistic update - realtime listener sẽ lo
+        const result = await userService.unfollowUser(currentUserId, currentUserData.uid);
+        console.log('Unfollow result:', result);
+        if (result.success) {
+          setIsFollowing(false);
+        } else {
+          Alert.alert('Error', result.error || 'Failed to unfollow');
+        }
       } else {
-        await userService.followUser(currentUserId, currentUserData.uid);
-        setIsFollowing(true);
-        // Không cần optimistic update - realtime listener sẽ lo
+        const result = await userService.followUser(currentUserId, currentUserData.uid);
+        console.log('Follow result:', result);
+        if (result.success) {
+          setIsFollowing(true);
+        } else {
+          Alert.alert('Error', result.error || 'Failed to follow');
+        }
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update follow status');
+    } catch (error: any) {
+      console.error('Follow toggle error:', error);
+      Alert.alert('Error', error.message || 'Failed to update follow status');
     } finally {
       setFollowLoading(false);
     }

@@ -99,13 +99,14 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    batch.update(currentUserRef, {
+    // Sử dụng set với merge để tự động tạo field nếu chưa tồn tại
+    batch.set(currentUserRef, {
       followingCount: firestore.FieldValue.increment(1)
-    });
+    }, { merge: true });
 
-    batch.update(targetUserRef, {
+    batch.set(targetUserRef, {
       followersCount: firestore.FieldValue.increment(1)
-    });
+    }, { merge: true });
 
     await batch.commit();
     return { success: true };
@@ -139,13 +140,14 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    batch.update(currentUserRef, {
+    // Sử dụng set với merge để tự động tạo field nếu chưa tồn tại
+    batch.set(currentUserRef, {
       followingCount: firestore.FieldValue.increment(-1)
-    });
+    }, { merge: true });
 
-    batch.update(targetUserRef, {
+    batch.set(targetUserRef, {
       followersCount: firestore.FieldValue.increment(-1)
-    });
+    }, { merge: true });
 
     await batch.commit();
     return { success: true };
@@ -237,4 +239,19 @@ export const subscribeToUserUpdates = (
     );
 
   return unsubscribe;
+};
+
+/**
+ * Ensure user has followersCount and followingCount fields
+ */
+export const ensureFollowCountFields = async (userId: string): Promise<void> => {
+  try {
+    const userRef = db.collection(COLLECTIONS.USERS).doc(userId);
+    await userRef.set({
+      followersCount: 0,
+      followingCount: 0
+    }, { merge: true });
+  } catch (error) {
+    console.error('Error ensuring follow count fields:', error);
+  }
 };
