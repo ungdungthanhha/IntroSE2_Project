@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, memo } from 'react'; // Thêm memo 
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable, ActivityIndicator
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, ActivityIndicator, Modal, Share
 } from 'react-native';
 import Video from 'react-native-video';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play } from 'lucide-react-native';
@@ -41,6 +41,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentsCount, setCommentsCount] = useState(video.commentsCount || 0);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   // Đồng bộ lại trạng thái khi video prop thay đổi (khi lướt feed)
   useEffect(() => {
@@ -195,6 +196,27 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
   // Tạo link ảnh poster từ link Cloudinary
   const posterUrl = video.videoUrl?.replace(".mp4", ".jpg");
+  const shareLink = video.videoUrl || `https://tictoc.app/video/${video.id}`;
+  const shareOptions = [
+    'Messenger',
+    'WhatsApp',
+    'Facebook',
+    'Telegram',
+    'More'
+  ];
+
+  const handleShare = async (platform?: string) => {
+    const prefix = platform ? `${platform}: ` : '';
+    try {
+      await Share.share({
+        message: `${prefix}${shareLink}`,
+        url: shareLink,
+        title: 'Share video'
+      });
+    } catch (error) {
+      // swallow share errors
+    }
+  };
   // ...
 
   return (
@@ -283,7 +305,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action}>
+          <TouchableOpacity style={styles.action} onPress={() => setShowShare(true)}>
             <Share2 size={35} color="#fff" />
             <Text style={styles.actionText}>Share</Text>
           </TouchableOpacity>
@@ -352,6 +374,41 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </KeyboardAvoidingView>
         </View>
       )}
+
+      {/* SHARE SHEET */}
+      <Modal visible={showShare} transparent animationType="fade" onRequestClose={() => setShowShare(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowShare(false)}>
+          <View style={styles.shareSheet}>
+            <View style={styles.shareHeader}>
+              <Text style={styles.shareTitle}>Share video</Text>
+              <TouchableOpacity onPress={() => setShowShare(false)}>
+                <X size={20} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.shareLinkBox}>
+              <Text style={styles.shareLabel}>Video link</Text>
+              <View style={styles.shareLinkRow}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <Text style={styles.shareLinkText}>{shareLink}</Text>
+                </ScrollView>
+                <TouchableOpacity style={styles.shareCopyBtn} onPress={() => handleShare('Copy link')}>
+                  <Text style={styles.shareCopyText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.shareTargets}>
+              <Text style={styles.shareLabel}>Share with</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shareButtonsRow}>
+                {shareOptions.map((opt) => (
+                  <TouchableOpacity key={opt} style={styles.shareTargetBtn} onPress={() => handleShare(opt)}>
+                    <Text style={styles.shareTargetText}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -386,7 +443,21 @@ const styles = StyleSheet.create({
   commentInputBar: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 0.5, borderTopColor: '#eee', paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
   commentInput: { flex: 1, backgroundColor: '#f1f1f2', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10, color: '#000' },
   playIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  shareSheet: { backgroundColor: '#fff', padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  shareHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  shareTitle: { fontSize: 16, fontWeight: '700', color: '#000' },
+  shareLinkBox: { marginBottom: 12 },
+  shareLabel: { fontSize: 13, color: '#555', marginBottom: 6 },
+  shareLinkRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f4f4f5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  shareLinkText: { color: '#111', fontSize: 13, paddingRight: 10 },
+  shareCopyBtn: { backgroundColor: '#fe2c55', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  shareCopyText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  shareTargets: { marginTop: 8 },
+  shareButtonsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  shareTargetBtn: { backgroundColor: '#f4f4f5', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginRight: 8 },
+  shareTargetText: { color: '#000', fontWeight: '700', fontSize: 13 }
 });
 
 // QUAN TRỌNG: Sử dụng memo để không re-render nhầm
