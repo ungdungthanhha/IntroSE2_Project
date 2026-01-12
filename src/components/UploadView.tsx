@@ -12,7 +12,9 @@ import {
   StatusBar,
   Animated,
   Easing,
-  Platform
+  Platform,
+  Linking,
+  PermissionsAndroid
 } from 'react-native';
 import { 
   X, ArrowLeft, Wand2, Image as ImageIcon, 
@@ -22,8 +24,6 @@ import Video from 'react-native-video';
 import { 
   Camera, 
   useCameraDevice, 
-  useCameraPermission, 
-  useMicrophonePermission, 
   VideoFile 
 } from 'react-native-vision-camera';
 import Svg, { Circle } from 'react-native-svg';
@@ -44,8 +44,8 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   
   // State Camera & Permissions
   const device = useCameraDevice('back');
-  const { hasPermission: hasCamPermission, requestPermission: requestCamPermission } = useCameraPermission();
-  const { hasPermission: hasMicPermission, requestPermission: requestMicPermission } = useMicrophonePermission();
+  const [hasCamPermission, setHasCamPermission] = useState(false);
+  const [hasMicPermission, setHasMicPermission] = useState(false);
   const cameraRef = useRef<Camera>(null);
   
   // --- QUAN TRỌNG: Dùng Ref để tránh lỗi Closure khi hết giờ ---
@@ -70,13 +70,70 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   const radius = (circleSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
+  const requestFullPermissions = async (isInteractive = false) => {
+    // isInteractive = true: Người dùng bấm nút (có thể hiện Alert setting)
+    // isInteractive = false: Chạy lúc mở app (im lặng nếu bị từ chối)
+
+    if (Platform.OS === 'android') {
+      try {
+        // Xin cả 2 quyền cùng lúc
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        ]);
+
+        const camStatus = granted[PermissionsAndroid.PERMISSIONS.CAMERA];
+        const micStatus = granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+
+        // Cập nhật State
+        const isCamGranted = camStatus === PermissionsAndroid.RESULTS.GRANTED;
+        const isMicGranted = micStatus === PermissionsAndroid.RESULTS.GRANTED;
+        
+        setHasCamPermission(isCamGranted);
+        setHasMicPermission(isMicGranted);
+
+        // Logic hỏi lại hoặc bắt vào setting
+        if (!isCamGranted || !isMicGranted) {
+            // Nếu người dùng bấm nút Quay mà bị chặn vĩnh viễn
+            if (isInteractive && (
+                camStatus === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN || 
+                micStatus === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+            )) {
+                Alert.alert(
+                    "Cần cấp quyền",
+                    "Bạn đã chặn quyền Camera hoặc Micro. Vui lòng vào Cài đặt để bật lại thủ công.",
+                    [
+                        { text: "Hủy", style: "cancel" },
+                        { text: "Mở Cài đặt", onPress: () => Linking.openSettings() }
+                    ]
+                );
+            }
+            return false; // Chưa đủ quyền
+        }
+        return true; // Đủ quyền
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    } else {
+      // Logic cho iOS (Dùng hàm static của Vision Camera)
+      const camStatus = await Camera.requestCameraPermission();
+      const micStatus = await Camera.requestMicrophonePermission();
+      
+      const isGranted = camStatus === 'granted' && micStatus === 'granted';
+      setHasCamPermission(camStatus === 'granted');
+      setHasMicPermission(micStatus === 'granted');
+      
+      if (!isGranted && isInteractive && (camStatus === 'denied' || micStatus === 'denied')) {
+         Linking.openSettings(); // iOS chỉ có 1 lần hỏi, lần sau phải vào setting
+      }
+      return isGranted;
+    }
+  };
+
   // Xin quyền
   useEffect(() => {
-    const requestPermissions = async () => {
-      await requestCamPermission();
-      await requestMicPermission();
-    };
-    requestPermissions();
+    requestFullPermissions(false); // False: không hiện Alert Setting nếu bị chặn ngay lúc đầu
   }, []);
 
   // Reset animation khi đổi duration
@@ -152,7 +209,16 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   };
 
   // 3. Hàm Toggle chính
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
+    // Kiểm tra quyền trước khi quay
+    if (!hasCamPermission || !hasMicPermission) {
+        // Nếu chưa có quyền, gọi hàm xin quyền (Mode Interactive = true)
+        const granted = await requestFullPermissions(true);
+        if (!granted) return; // Nếu vẫn không được thì dừng
+        // Nếu được cấp quyền, người dùng cần bấm lại lần nữa để quay (UX an toàn)
+        return; 
+    }
+
     if (isRecordingRef.current) {
       stopRecording();
     } else {
@@ -240,7 +306,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   };
 
   const hasPermission = hasCamPermission && hasMicPermission;
-  if (!hasPermission) return <View style={styles.permissionContainer}><Text style={{color:'#fff'}}>Requesting Permissions...</Text></View>;
+  // if (!hasPermission) return <View style={styles.permissionContainer}><Text style={{color:'#fff'}}>Requesting Permissions...</Text></View>;
 
   // --- RENDER ---
   if (step === 'camera') {
@@ -248,13 +314,13 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
       <View style={styles.container}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         {device && (
-          <Camera
-            ref={cameraRef}
-            style={StyleSheet.absoluteFill}
-            device={device}
-            isActive={true}
-            video={true}
-            audio={true}
+          <Camera 
+            ref={cameraRef} 
+            style={StyleSheet.absoluteFill} 
+            device={device} 
+            isActive={true} 
+            video={true} 
+            audio={true} 
           />
         )}
 

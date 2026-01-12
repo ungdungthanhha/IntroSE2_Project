@@ -3,7 +3,10 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Image, 
   TextInput, ScrollView, Alert, ActivityIndicator, SafeAreaView, Modal, 
   TouchableWithoutFeedback,
-  StatusBar
+  StatusBar,
+  Linking,
+  PermissionsAndroid,
+  Platform
 } from 'react-native';
 import { useCameraPermission } from 'react-native-vision-camera';
 import { ChevronLeft, Camera, ChevronRight, Copy, XCircle } from 'lucide-react-native';
@@ -217,21 +220,48 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
 
   const onTakePhoto = async () => {
     try {
-        if (!hasCamPermission) {
-          const granted = await requestCamPermission();
-        if (!granted) return; 
+      // --- BƯỚC 1: XỬ LÝ QUYỀN (CHỈ ANDROID) ---
+      if (Platform.OS === 'android') {
+        const status = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA
+        );
+
+        if (status === PermissionsAndroid.RESULTS.DENIED) {
+          // Lần 1 & 2: Người dùng từ chối -> Return ngay.
+          // Lần sau bấm nút, popup hệ thống sẽ lại hiện ra (Đúng ý bạn).
+          return; 
+        } else if (status === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+          // Lần 3+: Đã bị chặn hẳn -> Hiện Alert bắt vào Setting.
+          Alert.alert(
+            "Cần quyền Camera",
+            "Bạn đã tắt quyền Camera. Vui lòng vào Cài đặt để bật lại thủ công.",
+            [
+              { text: "Hủy", style: "cancel" },
+              { text: "Mở Cài đặt", onPress: () => Linking.openSettings() }
+            ]
+          );
+          return;
+        }
+        // Nếu GRANTED (Cho phép) -> Code sẽ chạy xuống Bước 2
       }
-        const result = await launchCamera({
+
+      // --- BƯỚC 2: MỞ CAMERA (CHẠY CHO CẢ ANDROID VÀ IOS) ---
+      // Code cũ của bạn để cái này trong 'else' nên Android xin quyền xong không mở cam
+      const result = await launchCamera({
         mediaType: 'photo',
         quality: 0.8,
-        saveToPhotos: false, // Có lưu vào thư viện đt hay không
-        cameraType: 'front', // Mặc định cam trước cho selfie
-        });
-        processImageResult(result);
+        saveToPhotos: false,
+        cameraType: 'front',
+      });
+      
+      processImageResult(result);
+
     } catch (error) {
-        // Lưu ý: Trên máy thật cần cấp quyền Camera, giả lập thì tự động ok
-        console.error("Camera Error:", error);
+      console.error("Camera Error:", error);
+      // Bỏ qua lỗi user hủy chọn (nếu thư viện trả về lỗi này)
+      if ((error as any).errorCode !== 'E_PICKER_CANCELLED') {
         Alert.alert("Error", "Could not open camera. Check permissions.");
+      }
     }
   };
 
