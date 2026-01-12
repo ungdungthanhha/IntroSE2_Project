@@ -1,7 +1,6 @@
-import { db, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
+import { db, firebaseStorage, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase';
 import { User } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 
 
 /**
@@ -182,7 +181,7 @@ export const uploadUserAvatar = async (userId: string, imageUri: string): Promis
     // 1. Tạo tên file duy nhất (dựa trên UserID và thời gian)
     // Đường dẫn trên Storage sẽ là: avatars/user_id/avatar_timestamp.jpg
     const filename = `avatars/${userId}/avatar_${Date.now()}.jpg`;
-    const reference = storage().ref(filename);
+    const reference = firebaseStorage.ref(filename);
 
     // 2. Thực hiện upload
     // Lưu ý: putFile nhận đường dẫn file local
