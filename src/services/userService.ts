@@ -206,3 +206,30 @@ export const updateUserProfile = async (
     return { success: false, error: error.message };
   }
 };
+
+/**
+ * Subscribe to realtime user updates (bao gồm likesCount)
+ */
+export const subscribeToUserUpdates = (
+  userId: string,
+  callback: (user: User | null) => void
+): (() => void) => {
+  const unsubscribe = db
+    .collection(COLLECTIONS.USERS)
+    .doc(userId)
+    .onSnapshot(
+      (snapshot) => {
+        if (snapshot.exists) {
+          callback(snapshot.data() as User);
+        } else {
+          callback(null);
+        }
+      },
+      (error) => {
+        console.error('Error subscribing to user updates:', error);
+        callback(null);
+      }
+    );
+
+  return unsubscribe;
+};

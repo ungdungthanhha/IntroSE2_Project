@@ -38,6 +38,21 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
   const insets = useSafeAreaInsets();
   
+  // Realtime sync user data từ Firestore (bao gồm likesCount)
+  useEffect(() => {
+    const unsubscribe = userService.subscribeToUserUpdates(
+      initialUser.uid,
+      (updatedUser) => {
+        if (updatedUser) {
+          setCurrentUserData(updatedUser);
+          setFollowerCount(updatedUser.followersCount);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [initialUser.uid]);
+  
   useEffect(() => {
     if (!isOwnProfile && currentUserId) {
       checkFollowStatus();
