@@ -49,7 +49,7 @@ export const isFollowing = async (currentUserId: string, targetUserId: string): 
     const followDoc = await db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
+      .collection('following')
       .doc(targetUserId)
       .get();
     
@@ -75,7 +75,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
+      .collection('following')
       .doc(targetUserId);
     
     batch.set(followingRef, {
@@ -87,7 +87,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
-      .collection(SUBCOLLECTIONS.USER_FOLLOWERS)
+      .collection('followers')
       .doc(currentUserId);
     
     batch.set(followersRef, {
@@ -95,7 +95,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       followedAt: new Date().toISOString()
     });
 
-    // 3. Cập nhật số lượng Follower/Following (atomic increment)
+    // 3. Cập nhật số lượng Follower/Following
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
@@ -126,14 +126,14 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
+      .collection('following')
       .doc(targetUserId);
     batch.delete(followingRef);
 
     const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
-      .collection(SUBCOLLECTIONS.USER_FOLLOWERS)
+      .collection('followers')
       .doc(currentUserId);
     batch.delete(followersRef);
 
