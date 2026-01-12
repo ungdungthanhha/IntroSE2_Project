@@ -1,88 +1,21 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, ChevronDown, Camera, Send } from 'lucide-react-native';
-import { Chat, Message, User } from '../types/type';
-import * as chatService from '../services/chatService';
-import * as userService from '../services/userService';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput } from 'react-native';
+import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, ChevronDown, Camera } from 'lucide-react-native';
+import { Chat } from '../types/type';
+import { MOCK_CHATS } from '../constants';
 
 interface ChatViewProps {
   onChatDetailChange?: (isInDetail: boolean) => void;
-  currentUser: User;
 }
 
-const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) => {
+const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange }) => {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [loadingChats, setLoadingChats] = useState(true);
 
   // Notify parent when entering/leaving chat detail
   useEffect(() => {
     onChatDetailChange?.(selectedChat !== null);
   }, [selectedChat, onChatDetailChange]);
-
-  // Subscribe chats
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    setLoadingChats(true);
-    const unsub = chatService.subscribeChats(currentUser.uid, (list) => {
-      setChats(list);
-      setLoadingChats(false);
-    });
-    return () => unsub && unsub();
-  }, [currentUser?.uid]);
-
-  // Attach otherUser info if missing
-  useEffect(() => {
-    const missing = chats.filter((c) => !c.otherUser || !c.otherUser.username);
-    if (!missing.length) return;
-
-    const fill = async () => {
-      const updated = await Promise.all(chats.map(async (c) => {
-        if (c.otherUser && c.otherUser.username) return c;
-        const otherId = c.participants.find((p) => p !== currentUser.uid);
-        if (!otherId) return c;
-        const other = await userService.getUserById(otherId);
-        if (!other) return c;
-        return { ...c, otherUser: other } as Chat;
-      }));
-      setChats(updated);
-    };
-
-    fill();
-  }, [chats, currentUser.uid]);
-
-  // Subscribe messages when a chat is selected
-  useEffect(() => {
-    if (!selectedChat) return;
-    setLoadingMessages(true);
-    const unsub = chatService.subscribeMessages(selectedChat.id, (list) => {
-      setMessages(list);
-      setLoadingMessages(false);
-    });
-    return () => unsub && unsub();
-  }, [selectedChat]);
-
-  const handleSend = async () => {
-    if (!selectedChat) return;
-    const text = input.trim();
-    if (!text) return;
-    setInput('');
-    await chatService.sendMessage(selectedChat.id, currentUser, text, selectedChat.otherUser as User);
-  };
-
-  const selectChat = (chat: Chat) => {
-    setSelectedChat(chat);
-  };
-
-  if (!currentUser?.uid) {
-    return (
-      <View style={styles.centered}><Text>Please login to use chat.</Text></View>
-    );
-  }
 
   if (selectedChat) {
     return (
@@ -102,44 +35,34 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
             <Flag color="#000" size={20} />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.messagesList} showsVerticalScrollIndicator={false}>
-          {loadingMessages ? (
-            <ActivityIndicator size="small" color="#fe2c55" />
-          ) : (
-            messages.map((m) => {
-              const isMe = m.senderId === currentUser.uid;
-              return (
-                <View key={m.id} style={[styles.msgWrapper, isMe ? styles.msgMe : styles.msgOther]}>
-                  {!isMe && <Image source={{ uri: selectedChat.otherUser.avatarUrl }} style={styles.msgAvatar} />}
-                  <View style={isMe ? styles.msgBubbleMe : styles.msgBubbleOther}>
-                    <Text style={isMe ? styles.msgTextMe : styles.msgTextOther}>{m.text}</Text>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </ScrollView>
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.inputBar}>
-            <View style={styles.inputInner}>
-              <TextInput
-                placeholder="Message..."
-                placeholderTextColor="#999"
-                style={styles.textInput}
-                value={input}
-                onChangeText={setInput}
-                onSubmitEditing={handleSend}
-                returnKeyType="send"
-              />
-              <View style={styles.inputIcons}>
-                <TouchableOpacity onPress={handleSend}>
-                  <Send size={20} color={input ? '#fe2c55' : '#888'} />
-                </TouchableOpacity>
-              </View>
+        <ScrollView style={styles.messagesList} showsVerticalScrollIndicator={false}>
+          <Text style={styles.dateSeparator}>Nov 30, 2023, 9:41 AM</Text>
+          
+          <View style={[styles.msgWrapper, styles.msgMe]}>
+            <View style={styles.msgBubbleMe}>
+              <Text style={styles.msgTextMe}>Hey! Check this out.</Text>
             </View>
           </View>
-        </KeyboardAvoidingView>
+
+          <View style={[styles.msgWrapper, styles.msgOther]}>
+            <Image source={{ uri: selectedChat.otherUser.avatarUrl }} style={styles.msgAvatar} />
+            <View style={styles.msgBubbleOther}>
+              <Text style={styles.msgTextOther}>That looks amazing! How did you do that?</Text>
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={styles.inputBar}>
+          <View style={styles.inputInner}>
+            <TextInput placeholder="Message..." placeholderTextColor="#999" style={styles.textInput} />
+            <View style={styles.inputIcons}>
+              <Mic size={20} color="#888" />
+              <Smile size={20} color="#888" />
+              <ImageIcon size={20} color="#888" />
+            </View>
+          </View>
+        </View>
       </View>
     );
   }
@@ -163,32 +86,29 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
             <View style={styles.actPlus}><Plus color="#888" size={20}/></View>
             <Text style={styles.actName}>Create</Text>
           </TouchableOpacity>
-          {chats.map((c) => (
-            <View key={c.id} style={styles.actItem}>
-              <Image source={{ uri: c.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.actAvatar} />
-              <Text style={styles.actName}>{c.otherUser?.username || 'User'}</Text>
+          {MOCK_CHATS.map((c, i) => (
+            <View key={i} style={styles.actItem}>
+              <Image source={{ uri: c.otherUser.avatarUrl }} style={styles.actAvatar} />
+              <Text style={styles.actName}>{c.otherUser.username}</Text>
             </View>
           ))}
         </View>
 
         <Text style={styles.sectionTitle}>Messages</Text>
-        {loadingChats && <ActivityIndicator size="small" color="#fe2c55" style={{ marginVertical: 10 }} />}
-        {!loadingChats && chats.length === 0 && (
-          <Text style={{ paddingHorizontal: 15, color: '#888' }}>No messages yet</Text>
-        )}
-        {chats.map((chat) => (
+        
+        {MOCK_CHATS.map((chat) => (
           <TouchableOpacity 
             key={chat.id} 
             style={styles.chatRow}
-            onPress={() => selectChat(chat)}
+            onPress={() => setSelectedChat(chat as Chat)}
           >
-            <Image source={{ uri: chat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.rowAvatar} />
+            <Image source={{ uri: chat.otherUser.avatarUrl }} style={styles.rowAvatar} />
             <View style={styles.rowInfo}>
               <View style={styles.rowTop}>
-                <Text style={styles.rowUser}>{chat.otherUser?.username || 'User'}</Text>
-                <Text style={styles.rowTime}></Text>
+                <Text style={styles.rowUser}>{chat.otherUser.username}</Text>
+                <Text style={styles.rowTime}>2h</Text>
               </View>
-              <Text style={styles.rowMsg} numberOfLines={1}>{chat.lastMessage || ''}</Text>
+              <Text style={styles.rowMsg} numberOfLines={1}>{chat.lastMessage}</Text>
             </View>
             <Camera size={20} color="#ddd" />
           </TouchableOpacity>
@@ -244,8 +164,7 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   rowUser: { fontWeight: '700', fontSize: 15, color: '#000' },
   rowTime: { fontSize: 12, color: '#aaa' },
-  rowMsg: { color: '#888', fontSize: 14 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' }
+  rowMsg: { color: '#888', fontSize: 14 }
 });
 
 export default ChatView;

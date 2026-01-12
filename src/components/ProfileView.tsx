@@ -38,47 +38,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
   const insets = useSafeAreaInsets();
   
-  // Ensure follow count fields exist on mount
-  useEffect(() => {
-    const ensureFields = async () => {
-      await userService.ensureFollowCountFields(initialUser.uid);
-      if (currentUserId && currentUserId !== initialUser.uid) {
-        await userService.ensureFollowCountFields(currentUserId);
-      }
-    };
-    ensureFields();
-  }, [initialUser.uid, currentUserId]);
-  
-  // Realtime sync user data từ Firestore (bao gồm likesCount, followersCount)
-  useEffect(() => {
-    const unsubscribe = userService.subscribeToUserUpdates(
-      initialUser.uid,
-      (updatedUser) => {
-        if (updatedUser) {
-          setCurrentUserData(updatedUser);
-          setFollowerCount(Math.max(0, updatedUser.followersCount || 0));
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [initialUser.uid]);
-
-  // Realtime sync current user data (để cập nhật followingCount khi ở profile người khác)
-  useEffect(() => {
-    if (!isOwnProfile && currentUserId && currentUserId !== initialUser.uid) {
-      const unsubscribe = userService.subscribeToUserUpdates(
-        currentUserId,
-        (updatedCurrentUser) => {
-          // Chỉ cần update followingCount của current user, không cần setState toàn bộ
-          // Vì đây là profile của người khác, ta chỉ quan tâm đến followingCount
-        }
-      );
-
-      return () => unsubscribe();
-    }
-  }, [currentUserId, initialUser.uid, isOwnProfile]);
-  
   useEffect(() => {
     if (!isOwnProfile && currentUserId) {
       checkFollowStatus();
@@ -115,33 +74,20 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleFollowToggle = async () => {
-    if (!currentUserId) {
-      console.log('No currentUserId');
-      return;
-    }
+    if (!currentUserId) return;
     setFollowLoading(true);
     try {
-      console.log(`Attempting to ${isFollowing ? 'unfollow' : 'follow'} user:`, currentUserData.uid);
       if (isFollowing) {
-        const result = await userService.unfollowUser(currentUserId, currentUserData.uid);
-        console.log('Unfollow result:', result);
-        if (result.success) {
-          setIsFollowing(false);
-        } else {
-          Alert.alert('Error', result.error || 'Failed to unfollow');
-        }
+        await userService.unfollowUser(currentUserId, currentUserData.uid);
+        setIsFollowing(false);
+        setFollowerCount(prev => Math.max(0, prev - 1));
       } else {
-        const result = await userService.followUser(currentUserId, currentUserData.uid);
-        console.log('Follow result:', result);
-        if (result.success) {
-          setIsFollowing(true);
-        } else {
-          Alert.alert('Error', result.error || 'Failed to follow');
-        }
+        await userService.followUser(currentUserId, currentUserData.uid);
+        setIsFollowing(true);
+        setFollowerCount(prev => prev + 1);
       }
-    } catch (error: any) {
-      console.error('Follow toggle error:', error);
-      Alert.alert('Error', error.message || 'Failed to update follow status');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update follow status');
     } finally {
       setFollowLoading(false);
     }
