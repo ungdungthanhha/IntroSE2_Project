@@ -1,5 +1,6 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
+import storage from '@react-native-firebase/storage';
 
 
 /**
@@ -188,6 +189,26 @@ export const searchUsers = async (query: string): Promise<User[]> => {
   } catch (error) {
     console.error('Error searching users:', error);
     return [];
+  }
+};
+
+export const uploadUserAvatar = async (userId: string, imageUri: string): Promise<string | null> => {
+  try {
+    // 1. Tạo tên file duy nhất (dựa trên UserID và thời gian)
+    // Đường dẫn trên Storage sẽ là: avatars/user_id/avatar_timestamp.jpg
+    const filename = `avatars/${userId}/avatar_${Date.now()}.jpg`;
+    const reference = storage().ref(filename);
+
+    // 2. Thực hiện upload
+    // Lưu ý: putFile nhận đường dẫn file local
+    await reference.putFile(imageUri);
+
+    // 3. Lấy đường dẫn tải xuống (URL public)
+    const url = await reference.getDownloadURL();
+    return url;
+  } catch (error) {
+    console.error("Upload Avatar Error:", error);
+    return null;
   }
 };
 

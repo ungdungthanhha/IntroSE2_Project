@@ -5,6 +5,7 @@ import {
   TouchableWithoutFeedback,
   StatusBar
 } from 'react-native';
+import { useCameraPermission } from 'react-native-vision-camera';
 import { ChevronLeft, Camera, ChevronRight, Copy, XCircle } from 'lucide-react-native';
 import { User } from '../types/type';
 import * as userService from '../services/userService';
@@ -34,6 +35,7 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const insets = useSafeAreaInsets();
+  const { hasPermission: hasCamPermission, requestPermission: requestCamPermission } = useCameraPermission();
   const [newAvatarFile, setNewAvatarFile] = useState<Asset | null>(null);
   const [toastMessage, setToastMessage] = useState('');
   const [editingField, setEditingField] = useState<'name' | 'username' | 'bio' | 'instagram' | 'youtube' | null>(null);
@@ -91,7 +93,7 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
   // Kiểm tra xem có thay đổi nào chưa lưu không
   const hasUnsavedChanges = () => {
     return (
-      draftProfile.displayName !== (user.displayName || '') ||
+      draftProfile.displayName !== (user.displayName || user.username) ||
       draftProfile.username !== (user.username || '') ||
       draftProfile.bio !== (user.bio || '') ||
       draftProfile.avatarUrl !== (user.avatarUrl || '') ||
@@ -103,19 +105,47 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
   // Hàm xử lý lưu dữ liệu
   const handleSave = async () => {
     setIsSaving(true);
-    const result = await userService.updateUserProfile(user.uid, draftProfile);
-    setIsSaving(false);
-    
 
-    if (result.success) {
-      // Cập nhật lại state user ở App/ProfileView
-      onUpdateSuccess({ ...user, ...draftProfile });
-      setToastMessage('Changes saved.');
-      setTimeout(() => {
-        setToastMessage('');
-        }, 3000);
-    } else {
-      Alert.alert('Error', 'Failed to save profile changes.');
+    try {
+      let finalAvatarUrl = draftProfile.avatarUrl;
+      if (newAvatarFile && newAvatarFile.uri) {
+        const uploadedUrl = await userService.uploadUserAvatar(user.uid, newAvatarFile.uri);
+        if (uploadedUrl) {
+          finalAvatarUrl = uploadedUrl; // Gán link online vừa nhận được
+        } else {
+          Alert.alert("Upload Failed", "Could not upload profile picture. Please try again.");
+          setIsSaving(false);
+          return; // Dừng lại nếu upload lỗi
+        }
+      }
+
+      const profileToUpdate = {
+        displayName: draftProfile.displayName,
+        username: draftProfile.username,
+        bio: draftProfile.bio,
+        instagramHandle: draftProfile.instagramHandle,
+        youtubeHandle: draftProfile.youtubeHandle,
+        avatarUrl: finalAvatarUrl // Dùng link online (hoặc link cũ nếu ko đổi)
+      };
+
+      const result = await userService.updateUserProfile(user.uid, profileToUpdate);
+
+      if (result.success) {
+        // Cập nhật lại state user ở App/ProfileView
+        onUpdateSuccess({ ...user, ...draftProfile });
+        setToastMessage('Changes saved.');
+        setNewAvatarFile(null);
+        setTimeout(() => {
+          setToastMessage('');
+          }, 3000);
+      } else {
+        Alert.alert('Error', 'Failed to save profile changes.');
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'An unexpected error occurred.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -187,6 +217,10 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
 
   const onTakePhoto = async () => {
     try {
+        if (!hasCamPermission) {
+          const granted = await requestCamPermission();
+        if (!granted) return; 
+      }
         const result = await launchCamera({
         mediaType: 'photo',
         quality: 0.8,
@@ -214,7 +248,7 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onClose, onUpda
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 10}]}>
         <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* HEADER */}
       <View style={styles.header}>
