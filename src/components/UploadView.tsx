@@ -217,11 +217,13 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
     try {
       const cloudinaryUrl = await videoService.uploadVideoToCloudinary(previewUrl);
       if (!cloudinaryUrl) throw new Error('Upload failed');
+      const { videoUrl, thumbUrl } = cloudinaryUrl;
       const videoMetadata = {
         ownerUid: currentUser?.uid || 'anonymous',
         ownerName: currentUser?.username || 'Anonymous',
         ownerAvatar: currentUser?.avatarUrl || 'default',
-        videoUrl: cloudinaryUrl,
+        videoUrl: videoUrl,
+        thumbUrl: thumbUrl,
         caption: caption,
         createdAt: new Date().toISOString()
       };

@@ -139,7 +139,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 10}]}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* Header - Giống ảnh mẫu */}
       <View style={styles.header}>

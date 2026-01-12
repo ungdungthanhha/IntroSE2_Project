@@ -32,8 +32,17 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
     // DEBUG DATA UPLOAD
     if (data) {
       console.log('Cloudinary Upload Success:', data);
+
+      // --- LOGIC TẠO THUMBNAIL TỰ ĐỘNG ---
+        const videoUrl = data.secure_url;
+        
+        // Cloudinary cho phép lấy ảnh bìa bằng cách đổi đuôi file thành .jpg
+        // Ví dụ: .../upload/v123/abc.mp4  ->  .../upload/v123/abc.jpg
+        const thumbUrl = videoUrl.replace(/\.[^/.]+$/, ".jpg"); 
+
+        return { videoUrl, thumbUrl };
     }
-    return data.secure_url; // Trả về link URL của video
+    return null;
   } catch (error) {
     console.error('Cloudinary Upload Error:', error);
     return null;
