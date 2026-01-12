@@ -1,4 +1,4 @@
-import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
+import { db, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
 
 
@@ -48,7 +48,7 @@ export const isFollowing = async (currentUserId: string, targetUserId: string): 
     const followDoc = await db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection('following')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
       .doc(targetUserId)
       .get();
     
@@ -74,7 +74,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection('following')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
       .doc(targetUserId);
     
     batch.set(followingRef, {
@@ -86,7 +86,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
-      .collection('followers')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWERS)
       .doc(currentUserId);
     
     batch.set(followersRef, {
@@ -132,14 +132,14 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
-      .collection('following')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWING)
       .doc(targetUserId);
     batch.delete(followingRef);
 
     const followersRef = db
       .collection(COLLECTIONS.USERS)
       .doc(targetUserId)
-      .collection('followers')
+      .collection(SUBCOLLECTIONS.USER_FOLLOWERS)
       .doc(currentUserId);
     batch.delete(followersRef);
 

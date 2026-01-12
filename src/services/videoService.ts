@@ -1,4 +1,4 @@
-import { db, COLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
+import { db, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
 import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
 import { launchImageLibrary, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
@@ -110,14 +110,26 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
 export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: boolean) => {
   try {
     const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
-    const likeRef = videoRef.collection('likes').doc(userId);
+    const likeRef = videoRef.collection(SUBCOLLECTIONS.VIDEO_LIKES).doc(userId);
     const batch = db.batch(); //
+
+    // Lấy thông tin video để xác định chủ sở hữu (ownerUid)
+    const videoSnap = await videoRef.get();
+    const videoData = videoSnap.data() as Video | undefined;
+    const ownerUid = videoData?.ownerUid;
 
     if (isLiked) {
       batch.delete(likeRef);
       batch.update(videoRef, {
         likesCount: firestore.FieldValue.increment(-1)
       });
+      // Giảm số lượt thích tổng của chủ sở hữu video
+      if (ownerUid) {
+        const ownerRef = db.collection(COLLECTIONS.USERS).doc(ownerUid);
+        batch.update(ownerRef, {
+          likesCount: firestore.FieldValue.increment(-1)
+        });
+      }
     } else {
       batch.set(likeRef, {
         userId,
@@ -126,6 +138,13 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
       batch.update(videoRef, {
         likesCount: firestore.FieldValue.increment(1)
       });
+      // Tăng số lượt thích tổng của chủ sở hữu video
+      if (ownerUid) {
+        const ownerRef = db.collection(COLLECTIONS.USERS).doc(ownerUid);
+        batch.update(ownerRef, {
+          likesCount: firestore.FieldValue.increment(1)
+        });
+      }
     }
 
     await batch.commit();
@@ -136,12 +155,31 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
 };
 
 /**
+ * 5b. Kiểm tra user đã like video chưa (để tránh cộng trùng)
+ */
+export const isVideoLikedByUser = async (videoId: string, userId: string) => {
+  try {
+    const likeSnap = await db
+      .collection(COLLECTIONS.VIDEOS)
+      .doc(videoId)
+      .collection(SUBCOLLECTIONS.VIDEO_LIKES)
+      .doc(userId)
+      .get();
+
+    return likeSnap.exists;
+  } catch (error) {
+    console.error('Check like error:', error);
+    return false;
+  }
+};
+
+/**
  * 6. Thêm bình luận vào video
  */
 export const addComment = async (videoId: string, userId: string, userAvatar: string, username: string, text: string) => {
   try {
     const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
-    const commentRef = videoRef.collection('comments').doc();
+    const commentRef = videoRef.collection(SUBCOLLECTIONS.VIDEO_COMMENTS).doc();
 
     const newComment: Comment = {
       id: commentRef.id,
@@ -163,6 +201,28 @@ export const addComment = async (videoId: string, userId: string, userAvatar: st
     return { success: true, comment: newComment }; //
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 6b. Lấy danh sách bình luận của video
+ */
+export const getComments = async (videoId: string): Promise<Comment[]> => {
+  try {
+    const snapshot = await db
+      .collection(COLLECTIONS.VIDEOS)
+      .doc(videoId)
+      .collection(SUBCOLLECTIONS.VIDEO_COMMENTS)
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Comment));
+  } catch (error) {
+    console.error('Error getting comments:', error);
+    return [];
   }
 };
 
