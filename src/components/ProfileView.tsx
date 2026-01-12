@@ -38,20 +38,35 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
   const insets = useSafeAreaInsets();
   
-  // Realtime sync user data từ Firestore (bao gồm likesCount)
+  // Realtime sync user data từ Firestore (bao gồm likesCount, followersCount)
   useEffect(() => {
     const unsubscribe = userService.subscribeToUserUpdates(
       initialUser.uid,
       (updatedUser) => {
         if (updatedUser) {
           setCurrentUserData(updatedUser);
-          setFollowerCount(updatedUser.followersCount);
+          setFollowerCount(Math.max(0, updatedUser.followersCount || 0));
         }
       }
     );
 
     return () => unsubscribe();
   }, [initialUser.uid]);
+
+  // Realtime sync current user data (để cập nhật followingCount khi ở profile người khác)
+  useEffect(() => {
+    if (!isOwnProfile && currentUserId && currentUserId !== initialUser.uid) {
+      const unsubscribe = userService.subscribeToUserUpdates(
+        currentUserId,
+        (updatedCurrentUser) => {
+          // Chỉ cần update followingCount của current user, không cần setState toàn bộ
+          // Vì đây là profile của người khác, ta chỉ quan tâm đến followingCount
+        }
+      );
+
+      return () => unsubscribe();
+    }
+  }, [currentUserId, initialUser.uid, isOwnProfile]);
   
   useEffect(() => {
     if (!isOwnProfile && currentUserId) {
@@ -95,11 +110,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
       if (isFollowing) {
         await userService.unfollowUser(currentUserId, currentUserData.uid);
         setIsFollowing(false);
-        setFollowerCount(prev => Math.max(0, prev - 1));
+        // Không cần optimistic update - realtime listener sẽ lo
       } else {
         await userService.followUser(currentUserId, currentUserData.uid);
         setIsFollowing(true);
-        setFollowerCount(prev => prev + 1);
+        // Không cần optimistic update - realtime listener sẽ lo
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to update follow status');
@@ -180,17 +195,17 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           {/* Stats Section */}
           <View style={styles.stats}>
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>{currentUserData.followingCount || 0}</Text>
+              <Text style={styles.statVal}>{Math.max(0, currentUserData.followingCount || 0)}</Text>
               <Text style={styles.statLab}>Following</Text>
             </TouchableOpacity>
             <View style={styles.divider} />
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>{followerCount || 0}</Text>
+              <Text style={styles.statVal}>{Math.max(0, followerCount || 0)}</Text>
               <Text style={styles.statLab}>Followers</Text>
             </TouchableOpacity>
             <View style={styles.divider} />
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>{currentUserData.likesCount || 0}</Text>
+              <Text style={styles.statVal}>{Math.max(0, currentUserData.likesCount || 0)}</Text>
               <Text style={styles.statLab}>Likes</Text>
             </TouchableOpacity>
           </View>

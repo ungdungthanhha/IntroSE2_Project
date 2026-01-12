@@ -275,7 +275,10 @@ const AppContent = () => {
               <ProfileView
                 user={viewingProfile || currentUser}
                 isOwnProfile={!viewingProfile}
-                onBack={() => { setViewingProfile(null); setActiveTab(AppTab.HOME); }} userVideos={[]} />
+                currentUserId={currentUser.uid}
+                onBack={() => { setViewingProfile(null); setActiveTab(AppTab.HOME); }} 
+                userVideos={[]} 
+              />
             )}
           </View>
 

@@ -1,5 +1,6 @@
 import { db, COLLECTIONS, SUBCOLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
+import firestore from '@react-native-firebase/firestore';
 
 
 /**
@@ -94,24 +95,16 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       followedAt: new Date().toISOString()
     });
 
-    // 3. Cập nhật số lượng Follower/Following
+    // 3. Cập nhật số lượng Follower/Following (atomic increment)
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    const [currentUserDoc, targetUserDoc] = await Promise.all([
-      currentUserRef.get(),
-      targetUserRef.get()
-    ]);
-
-    const currentUserData = currentUserDoc.data();
-    const targetUserData = targetUserDoc.data();
-
     batch.update(currentUserRef, {
-      followingCount: (currentUserData?.followingCount || 0) + 1
+      followingCount: firestore.FieldValue.increment(1)
     });
 
     batch.update(targetUserRef, {
-      followersCount: (targetUserData?.followersCount || 0) + 1
+      followersCount: firestore.FieldValue.increment(1)
     });
 
     await batch.commit();
@@ -146,20 +139,12 @@ export const unfollowUser = async (currentUserId: string, targetUserId: string):
     const currentUserRef = db.collection(COLLECTIONS.USERS).doc(currentUserId);
     const targetUserRef = db.collection(COLLECTIONS.USERS).doc(targetUserId);
 
-    const [currentUserDoc, targetUserDoc] = await Promise.all([
-      currentUserRef.get(),
-      targetUserRef.get()
-    ]);
-
-    const currentUserData = currentUserDoc.data();
-    const targetUserData = targetUserDoc.data();
-
     batch.update(currentUserRef, {
-      followingCount: Math.max(0, (currentUserData?.followingCount || 1) - 1)
+      followingCount: firestore.FieldValue.increment(-1)
     });
 
     batch.update(targetUserRef, {
-      followersCount: Math.max(0, (targetUserData?.followersCount || 1) - 1)
+      followersCount: firestore.FieldValue.increment(-1)
     });
 
     await batch.commit();
