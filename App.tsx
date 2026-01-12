@@ -57,6 +57,7 @@ const AppContent = () => {
         const newUser: User = {
           uid: user.uid,
           username: (user.displayName || 'user').replace(/\s/g, '').toLowerCase(),
+          role: 'user',
           displayName: user.displayName || 'User',
           email: user.email || '',
           birthday: '',

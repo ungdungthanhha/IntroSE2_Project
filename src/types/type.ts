@@ -2,6 +2,7 @@
 export interface User {
   uid: string;
   username: string;
+  role: 'admin' | 'user'; 
   displayName: string;
   email: string;
   birthday: string;
