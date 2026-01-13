@@ -181,7 +181,7 @@ const DailyScreenTimeView: React.FC<DailyScreenTimeViewProps> = ({ onBack }) => 
 
                 {/* Main Toggle */}
                 <View style={styles.sectionItem}>
-                    <Text style={styles.sectionText}>Limit time using TikTok</Text>
+                    <Text style={styles.sectionText}>Limit time using Tictoc</Text>
                     <Switch
                         trackColor={{ false: "#e0e0e0", true: "#fe2c55" }}
                         thumbColor={"#fff"}

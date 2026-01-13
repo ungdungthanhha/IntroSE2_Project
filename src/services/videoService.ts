@@ -198,6 +198,28 @@ export const toggleSaveVideo = async (videoId: string, userId: string, isSaved: 
 };
 
 /**
+ * NEW: Xóa Video
+ */
+export const deleteVideo = async (videoId: string, userId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
+
+    // Kiểm tra quyền sở hữu (Security Rule cũng sẽ chặn, nhưng check ở đây cho chắc)
+    const doc = await videoRef.get();
+    if (!doc.exists) return { success: false, error: "Video not found" };
+    if (doc.data()?.ownerUid !== userId) return { success: false, error: "Unauthorized" };
+
+    // Xóa video (Lưu ý: Để xóa sạch hoàn toàn cần Cloud Functions để xóa recursive các subcollection likes/comments)
+    // Ở client, ta xóa document chính. 
+    await videoRef.delete();
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * 9. Lấy danh sách video đã Like của User
  */
 export const getLikedVideos = async (userId: string): Promise<Video[]> => {

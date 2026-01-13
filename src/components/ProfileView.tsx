@@ -24,6 +24,7 @@ interface ProfileViewProps {
   onSubViewChange?: (isSubView: boolean) => void;
   onUserUpdate?: (user: User) => void;
   onSelectVideo?: (video: Video) => void;
+  onVideoUpdate?: (videoId: string, action: 'delete' | 'unlike' | 'unsave') => void;
 }
 
 const ProfileView: React.FC<ProfileViewProps> = ({
@@ -35,8 +36,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   onMessage,
   onSubViewChange,
   onUserUpdate,
-  onSelectVideo
+  onSelectVideo,
+  onVideoUpdate
 }) => {
+  // Use props directly instead of destructing to access onVideoUpdate in callback
+  const props = { onUserUpdate, onSelectVideo, onVideoUpdate };
   const [currentUserData, setCurrentUserData] = useState(initialUser);
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState('videos');
@@ -352,6 +356,75 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                 key={video.id}
                 style={styles.gridItem}
                 onPress={() => onSelectVideo && onSelectVideo(video)}
+                onLongPress={() => {
+                  if (!currentUserId) return;
+
+                  // CASE 1: DELETE MY VIDEO
+                  if (activeTab === 'videos' && isOwnProfile && currentUserId === video.ownerUid) {
+                    Alert.alert(
+                      "Delete Video",
+                      "Are you sure you want to delete this video?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete", style: "destructive", onPress: async () => {
+                            const res = await videoService.deleteVideo(video.id, currentUserId);
+                            if (res.success) {
+                              Alert.alert("Deleted", "Video has been removed.");
+                              if (props.onDeleteVideo) props.onDeleteVideo(video.id);
+                            } else {
+                              Alert.alert("Error", res.error || "Failed");
+                            }
+                          }
+                        }
+                      ]
+                    );
+                  }
+
+                  // CASE 2: REMOVE FROM LIKED
+                  else if (activeTab === 'liked' && isOwnProfile) {
+                    Alert.alert(
+                      "Remove from Liked",
+                      "Unlike this video?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Remove", style: "destructive", onPress: async () => {
+                            // isLiked = true -> Pass true to toggle to false
+                            const res = await videoService.toggleLikeVideo(video.id, currentUserId, true);
+                            if (res.success) {
+                              setLikedVideos(prev => prev.filter(v => v.id !== video.id));
+                            } else {
+                              Alert.alert("Error", res.error || "Failed");
+                            }
+                          }
+                        }
+                      ]
+                    );
+                  }
+
+                  // CASE 3: REMOVE FROM SAVED (LOCKED TAB)
+                  else if (activeTab === 'locked' && isOwnProfile) {
+                    Alert.alert(
+                      "Remove from Saved",
+                      "Unsave this video?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Remove", style: "destructive", onPress: async () => {
+                            // isSaved = true -> Pass true to toggle to false
+                            const res = await videoService.toggleSaveVideo(video.id, currentUserId, true);
+                            if (res.success) {
+                              setSavedVideos(prev => prev.filter(v => v.id !== video.id));
+                            } else {
+                              Alert.alert("Error", res.error || "Failed");
+                            }
+                          }
+                        }
+                      ]
+                    );
+                  }
+                }}
               >
                 <Image
                   source={{ uri: getThumbnail(video) }}
