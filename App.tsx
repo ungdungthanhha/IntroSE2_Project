@@ -334,6 +334,7 @@ const AppContent = () => {
                   <ProfileView
                     user={currentUser}
                     isOwnProfile={true}
+                    currentUserId={currentUser.uid} // Added currentUserId
                     onBack={() => setActiveTab(AppTab.HOME)}
                     userVideos={myVideos}
                     onSubViewChange={setIsProfileSubView}
@@ -354,6 +355,21 @@ const AppContent = () => {
                       ));
                     }}
                     onSelectVideo={setSelectedVideo} // Enable video playback
+                    onVideoUpdate={(videoId, action) => {
+                      if (action === 'delete') {
+                        setMyVideos(prev => prev.filter(v => v.id !== videoId));
+                        setVideos(prev => prev.filter(v => v.id !== videoId));
+                      } else if (action === 'unlike') {
+                        // Giảm like count trong list videos
+                        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, likesCount: Math.max(0, v.likesCount - 1), isLiked: false } : v));
+                        // Nếu user đang xem list của chính mình, cũng update luôn
+                        setMyVideos(prev => prev.map(v => v.id === videoId ? { ...v, likesCount: Math.max(0, v.likesCount - 1), isLiked: false } : v));
+                      } else if (action === 'unsave') {
+                        // Giảm save count
+                        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, savesCount: Math.max(0, (v.savesCount || 0) - 1), isSaved: false } : v));
+                        setMyVideos(prev => prev.map(v => v.id === videoId ? { ...v, savesCount: Math.max(0, (v.savesCount || 0) - 1), isSaved: false } : v));
+                      }
+                    }}
                   />
                 )}
               </View>
@@ -371,6 +387,7 @@ const AppContent = () => {
               <ProfileView
                 user={viewingProfile}
                 isOwnProfile={false}
+                currentUserId={currentUser.uid} // Added currentUserId
                 onBack={() => {
                   // Khi bấm Back ở Profile:
                   // Chỉ tắt Profile đi -> Lộ ra lớp bên dưới (Video Detail hoặc Discovery)
