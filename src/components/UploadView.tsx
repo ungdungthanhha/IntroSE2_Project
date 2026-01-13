@@ -185,7 +185,12 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
         onRecordingFinished: (video) => {
           console.log('Video finished:', video);
           // Khi file video đã tạo xong -> Chuyển trang
-          setPreviewUrl(video.path);
+          const path = video.path;
+          // Kiểm tra nếu chưa có 'file://' thì thêm vào (đặc biệt quan trọng cho Android)
+          const normalizedPath = Platform.OS === 'android' && !path.startsWith('file://') 
+            ? `file://${path}` 
+            : path;
+          setPreviewUrl(normalizedPath);
           setStep('details');
 
           // Reset trạng thái về ban đầu
