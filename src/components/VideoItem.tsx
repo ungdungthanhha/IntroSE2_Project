@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, memo } from 'react'; // Thêm memo để tối ưu
+import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
@@ -7,18 +7,20 @@ import {
 import Video from 'react-native-video';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play } from 'lucide-react-native';
 import { Video as VideoType, User } from '../types/type';
+import * as videoService from '../services/videoService';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
 interface VideoItemProps {
   video: VideoType;
   isActive: boolean;
-  shouldLoad: boolean; // Add prop
+  shouldLoad: boolean;
   onViewProfile?: (user: User) => void;
   itemHeight: number;
+  currentUserId?: string; // New prop
 }
 
-const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight }) => {
+const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId }) => {
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -32,6 +34,8 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [isPaused, setIsPaused] = useState(false); // Local pause state
   const [isLiked, setIsLiked] = useState(video.isLiked || false);
   const [isSaved, setIsSaved] = useState(video.isSaved || false);
+  const [likeCount, setLikeCount] = useState(video.likesCount);
+  const [saveCount, setSaveCount] = useState(video.savesCount || 0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -63,17 +67,33 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
   const togglePause = () => {
     setIsPaused(!isPaused);
-    // Animation control for disc if needed, but handled by isActive primarily.
-    // If we want the disc to stop spinning when paused manually:
-    if (!isPaused) { // Going to pause
+    if (!isPaused) {
       rotateAnim.stopAnimation();
-    } else { // Resuming
+    } else {
       Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1, duration: 3000, easing: Easing.linear, useNativeDriver: true,
         })
       ).start();
     }
+  };
+
+  const handleLike = async () => {
+    if (!currentUserId) return;
+    const newStatus = !isLiked;
+    setIsLiked(newStatus);
+    setLikeCount(prev => newStatus ? prev + 1 : prev - 1); // Optimistic update
+
+    await videoService.toggleLikeVideo(video.id, currentUserId, !newStatus);
+  };
+
+  const handleSave = async () => {
+    if (!currentUserId) return;
+    const newStatus = !isSaved;
+    setIsSaved(newStatus);
+    setSaveCount(prev => newStatus ? prev + 1 : prev - 1);
+
+    await videoService.toggleSaveVideo(video.id, currentUserId, isSaved);
   };
 
   const spin = rotateAnim.interpolate({
@@ -93,25 +113,22 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
   // Tạo link ảnh poster từ link Cloudinary
   const posterUrl = video.videoUrl?.replace(".mp4", ".jpg");
-  // ...
 
   return (
     <View style={[styles.container, { height: itemHeight }]}>
 
       {/* 4. CHỐNG VĂNG APP & DÍNH TIẾNG (RENDER ĐIỀU KIỆN) */}
-      {/* Mount video if active OR in preload window */}
       {shouldLoad ? (
         <Video
           source={{ uri: video.videoUrl }}
           style={StyleSheet.absoluteFill}
-          resizeMode="cover" // Tràn viền dọc khít màn hình
+          resizeMode="cover"
           repeat={true}
           paused={!isActive || isPaused}
           playInBackground={false}
           playWhenInactive={false}
           onProgress={handleProgress}
 
-          // Giảm tải cho máy thật Android
           progressUpdateInterval={1000}
           bufferConfig={{
             minBufferMs: 15000,
@@ -123,7 +140,6 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           poster={posterUrl}
         />
       ) : (
-        /* Hiện ảnh Poster khi không Active để giải phóng RAM */
         <Image
           source={{ uri: posterUrl }}
           style={StyleSheet.absoluteFill}
@@ -133,7 +149,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
       {/* OVERLAY TƯƠNG TÁC (Sidebar và Info) */}
       <View style={styles.overlay} pointerEvents="box-none">
-        {/* LỚP TAP BACKGROUND (Nằm dưới các nút, trên video) */}
+        {/* LỚP TAP BACKGROUND */}
         <Pressable onPress={togglePause} style={StyleSheet.absoluteFill}>
           {isPaused && (
             <View style={styles.playIconContainer}>
@@ -159,10 +175,10 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             </Pressable>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action} onPress={() => setIsLiked(!isLiked)}>
+          <TouchableOpacity style={styles.action} onPress={handleLike}>
             <Heart size={35} color={isLiked ? "#fe2c55" : "#fff"} fill={isLiked ? "#fe2c55" : "none"} />
             <Text style={styles.actionText}>
-              {(video.likesCount + (isLiked ? 1 : 0)).toLocaleString()}
+              {likeCount.toLocaleString()}
             </Text>
           </TouchableOpacity>
 
@@ -171,10 +187,10 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             <Text style={styles.actionText}>{video.commentsCount}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action} onPress={() => setIsSaved(!isSaved)}>
+          <TouchableOpacity style={styles.action} onPress={handleSave}>
             <Bookmark size={35} color={isSaved ? "#facd00" : "#fff"} fill={isSaved ? "#facd00" : "none"} />
             <Text style={styles.actionText}>
-              {(video.savesCount + (isSaved ? 1 : 0)).toLocaleString()}
+              {saveCount.toLocaleString()}
             </Text>
           </TouchableOpacity>
 
@@ -183,52 +199,73 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             <Text style={styles.actionText}>Share</Text>
           </TouchableOpacity>
 
-          <Animated.View style={[styles.musicDisc, { transform: [{ rotate: spin }] }]}>
-            <Image source={{ uri: video.ownerAvatar }} style={styles.discImage} />
+          <Animated.View style={[styles.discContainer, { transform: [{ rotate: spin }] }]}>
+            <Image source={{ uri: video.ownerAvatar }} style={styles.discImg} />
           </Animated.View>
         </View>
 
-        {/* THÔNG TIN CAPTION (Trái dưới) */}
-        <View style={styles.bottomInfo} pointerEvents="none">
+        {/* THÔNG TIN VIDEO (Trái - Dưới) */}
+        <View style={styles.bottomInfo} pointerEvents="box-none">
           <Text style={styles.username}>@{video.ownerName}</Text>
-          <Text style={styles.caption} numberOfLines={2}>{video.caption}</Text>
-          <View style={styles.audioRow}>
+          <Text style={styles.description} numberOfLines={2}>
+            {video.caption} <Text style={styles.hashtag}>#tictoc #vietnam</Text>
+          </Text>
+          <View style={styles.musicRow}>
             <Music size={14} color="#fff" />
-            <Text style={styles.audioText} numberOfLines={1}>original sound - {video.ownerName}</Text>
+            <Text style={styles.musicText}>Nhạc nền - {video.ownerName}</Text>
           </View>
         </View>
 
-        {/* PROGRESS BAR SIÊU MỎNG (Sát đáy) */}
+        {/* THANH TIẾN TRÌNH (Sát đáy) */}
         <View style={styles.progressBarContainer}>
           <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
         </View>
       </View>
 
-      {/* BẢNG BÌNH LUẬN (BOTTOM SHEET) */}
+      {/* MODAL COMMENT GIẢ LẬP */}
       {showComments && (
-        <View style={styles.commentSheet}>
+        <View style={styles.commentModal}>
           <View style={styles.commentHeader}>
             <Text style={styles.commentTitle}>{comments.length} comments</Text>
             <TouchableOpacity onPress={() => setShowComments(false)}>
-              <X size={20} color="#000" />
+              <X size={24} color="#000" />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.commentList} showsVerticalScrollIndicator={false}>
-            {comments.map(c => (
+          <ScrollView style={styles.commentList}>
+            {comments.map((c) => (
               <View key={c.id} style={styles.commentItem}>
-                <Image source={{ uri: `https://picsum.photos/seed/${c.user}/100/100` }} style={styles.commentAvatar} />
-                <View style={styles.commentContent}>
+                <View style={styles.commentAvatar} />
+                <View style={{ flex: 1 }}>
                   <Text style={styles.commentUser}>{c.user}</Text>
-                  <Text style={styles.commentMsg}>{c.text}</Text>
+                  <Text style={styles.commentContent}>{c.text}</Text>
+                  <View style={styles.commentMeta}>
+                    <Text style={styles.commentTime}>2h ago</Text>
+                    <Text style={styles.commentReply}>Reply</Text>
+                  </View>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Heart size={16} color="#ccc" />
+                  <Text style={{ fontSize: 10, color: '#888' }}>{c.likes}</Text>
                 </View>
               </View>
             ))}
           </ScrollView>
+
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.commentInputBar}>
-              <TextInput style={styles.commentInput} placeholder="Add comment..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} />
-              <TouchableOpacity onPress={() => { if (commentText.trim()) { setComments([{ id: Date.now().toString(), user: 'Me', text: commentText, likes: 0 }, ...comments]); setCommentText(''); } }}>
-                <Send size={20} color={commentText ? "#fe2c55" : "#ccc"} />
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Add comment..."
+                value={commentText}
+                onChangeText={setCommentText}
+              />
+              <TouchableOpacity onPress={() => {
+                if (commentText.trim()) {
+                  setComments([...comments, { id: Date.now().toString(), user: 'you', text: commentText, likes: 0 }]);
+                  setCommentText('');
+                }
+              }}>
+                <Send size={24} color="#fe2c55" />
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -238,37 +275,51 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   );
 };
 
-const styles = StyleSheet.create({
-  container: { width: WINDOW_WIDTH, backgroundColor: '#000' },
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
-  rightActions: { position: 'absolute', right: 8, bottom: 20, alignItems: 'center', zIndex: 50 },
-  avatarContainer: { marginBottom: 15 },
-  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: '#fff' },
-  plusIcon: { position: 'absolute', bottom: -8, alignSelf: 'center', backgroundColor: '#fe2c55', borderRadius: 10, padding: 2 },
-  action: { alignItems: 'center', marginTop: 18 },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 4 },
-  bottomInfo: { position: 'absolute', bottom: 35, left: 12, paddingRight: 100 },
-  username: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 5 },
-  caption: { color: '#fff', fontSize: 14, marginBottom: 8, lineHeight: 18 },
-  audioRow: { flexDirection: 'row', alignItems: 'center' },
-  audioText: { color: '#fff', fontSize: 13, marginLeft: 6, width: WINDOW_WIDTH * 0.5 },
-  musicDisc: { marginTop: 20, width: 45, height: 45, borderRadius: 22.5, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 8, borderColor: '#111' },
-  discImage: { width: 22, height: 22, borderRadius: 11 },
-  progressBarContainer: { position: 'absolute', bottom: 0, width: '100%', height: 2, backgroundColor: 'rgba(255,255,255,0.1)', zIndex: 20 },
-  progressBar: { height: '100%', backgroundColor: '#fff' },
-  commentSheet: { position: 'absolute', bottom: 0, width: '100%', height: '70%', backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, zIndex: 100 },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#eee' },
-  commentTitle: { fontWeight: '700', fontSize: 13, textAlign: 'center', flex: 1, color: '#000' },
-  commentList: { flex: 1, padding: 15 },
-  commentItem: { flexDirection: 'row', marginBottom: 20 },
-  commentAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 12 },
-  commentContent: { flex: 1 },
-  commentUser: { fontWeight: '700', fontSize: 12, color: '#888', marginBottom: 4 },
-  commentMsg: { fontSize: 14, color: '#111' },
-  commentInputBar: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 0.5, borderTopColor: '#eee', paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
-  commentInput: { flex: 1, backgroundColor: '#f1f1f2', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10, color: '#000' },
-  playIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 }
-});
+// Sử dụng memo để tránh render lại không cần thiết
+export default memo(VideoItem);
 
-// QUAN TRỌNG: Sử dụng memo để không re-render nhầm
-export default React.memo(VideoItem);
+const styles = StyleSheet.create({
+  container: { width: WINDOW_WIDTH, backgroundColor: '#000', position: 'relative' },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', paddingBottom: 20 }, // Tránh bottom nav
+
+  playIconContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  // Sidebar
+  rightActions: { position: 'absolute', right: 8, bottom: 90, alignItems: 'center', gap: 20 },
+  action: { alignItems: 'center' },
+  actionText: { color: '#fff', fontSize: 12, fontWeight: 'bold', marginTop: 4 },
+
+  avatarContainer: { marginBottom: 15, position: 'relative' },
+  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: '#fff' },
+  plusIcon: { position: 'absolute', bottom: -5, left: 16, width: 16, height: 16, borderRadius: 8, backgroundColor: '#fe2c55', alignItems: 'center', justifyContent: 'center' },
+
+  discContainer: { marginTop: 20 },
+  discImg: { width: 48, height: 48, borderRadius: 24, borderWidth: 8, borderColor: '#222' },
+
+  // Bottom Info
+  bottomInfo: { position: 'absolute', bottom: 20, left: 16, right: 80, paddingBottom: 10 },
+  username: { color: '#fff', fontWeight: 'bold', fontSize: 16, marginBottom: 8 },
+  description: { color: '#fff', fontSize: 14, marginBottom: 8 },
+  hashtag: { fontWeight: 'bold' },
+  musicRow: { flexDirection: 'row', alignItems: 'center' },
+  musicText: { color: '#fff', marginLeft: 8 },
+
+  // Progress Bar
+  progressBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
+  progressBar: { height: '100%', backgroundColor: '#fff' },
+
+  // Comments
+  commentModal: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%', backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12, zIndex: 100 },
+  commentHeader: { padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 0.5, borderColor: '#eee' },
+  commentTitle: { fontWeight: 'bold', fontSize: 14 },
+  commentList: { flex: 1 },
+  commentItem: { flexDirection: 'row', padding: 12, gap: 10 },
+  commentAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#ddd' },
+  commentUser: { fontWeight: 'bold', fontSize: 12, color: '#555' },
+  commentContent: { fontSize: 13, marginTop: 2 },
+  commentMeta: { flexDirection: 'row', gap: 15, marginTop: 4 },
+  commentTime: { fontSize: 11, color: '#999' },
+  commentReply: { fontSize: 11, fontWeight: 'bold', color: '#666' },
+  inputContainer: { flexDirection: 'row', padding: 10, borderTopWidth: 0.5, borderColor: '#eee', alignItems: 'center', gap: 10 },
+  input: { flex: 1, height: 36, backgroundColor: '#f0f0f0', borderRadius: 18, paddingHorizontal: 12 }
+});

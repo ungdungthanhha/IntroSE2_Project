@@ -9,6 +9,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import auth from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { db, COLLECTIONS } from './src/config/firebase';
+import * as videoService from './src/services/videoService';
 
 import VideoItem from './src/components/VideoItem';
 import BottomNav from './src/components/BottomNav';
@@ -46,6 +47,10 @@ const AppContent = () => {
 
   // Mới: State để biết Profile đang ở màn hình con (như Settings)
   const [isProfileSubView, setIsProfileSubView] = useState(false);
+
+  // State video của user state
+  const [myVideos, setMyVideos] = useState<VideoType[]>([]);
+  const [otherVideos, setOtherVideos] = useState<VideoType[]>([]);
 
   const ACTUAL_VIDEO_HEIGHT = WINDOW_HEIGHT - insets.top - BOTTOM_NAV_HEIGHT;
   const [setupStatus, setSetupStatus] = useState("Initializing...");
@@ -160,6 +165,21 @@ const AppContent = () => {
 
   useEffect(() => { fetchVideos(); }, []);
 
+  // Fetch My Videos
+  useEffect(() => {
+    if (currentUser?.uid) {
+      videoService.getVideosByUser(currentUser.uid).then(setMyVideos);
+    }
+  }, [currentUser?.uid, activeTab === AppTab.PROFILE]);
+
+  // Fetch Other User Videos
+  useEffect(() => {
+    if (viewingProfile?.uid) {
+      setOtherVideos([]); // Clear old data
+      videoService.getVideosByUser(viewingProfile.uid).then(setOtherVideos);
+    }
+  }, [viewingProfile?.uid]);
+
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) setActiveVideoIndex(viewableItems[0].index || 0);
   }).current;
@@ -215,6 +235,7 @@ const AppContent = () => {
                 itemHeight={WINDOW_HEIGHT}
                 // Khi bấm avatar trong video -> Set viewingProfile -> Profile sẽ hiện đè lên (Layer 2)
                 onViewProfile={setViewingProfile}
+                currentUserId={currentUser?.uid} // Pass currentUserId
               />
               <TouchableOpacity
                 style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 999, padding: 8 }}
@@ -255,6 +276,7 @@ const AppContent = () => {
                               shouldLoad={Math.abs(activeVideoIndex - index) <= 1}
                               itemHeight={ACTUAL_VIDEO_HEIGHT}
                               onViewProfile={setViewingProfile}
+                              currentUserId={currentUser?.uid} // Pass currentUserId
                             />
                           )}
                           snapToInterval={ACTUAL_VIDEO_HEIGHT}
@@ -281,7 +303,7 @@ const AppContent = () => {
                 )}
 
                 {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} />}
-                {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); setActiveTab(AppTab.HOME); }} />}
+                {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); if (currentUser?.uid) videoService.getVideosByUser(currentUser.uid).then(setMyVideos); setActiveTab(AppTab.HOME); }} />}
                 {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} currentUser={currentUser!} />}
 
                 {/* Khi bấm Tab Profile chính chủ */}
@@ -290,8 +312,25 @@ const AppContent = () => {
                     user={currentUser}
                     isOwnProfile={true}
                     onBack={() => setActiveTab(AppTab.HOME)}
-                    userVideos={[]}
+                    userVideos={myVideos}
                     onSubViewChange={setIsProfileSubView}
+                    onUserUpdate={(updatedUser) => {
+                      setCurrentUser(updatedUser);
+                      // Update local video state without re-fetching everything (Optimistic update)
+                      setVideos(prev => prev.map(v =>
+                        v.ownerUid === updatedUser.uid
+                          ? { ...v, ownerAvatar: updatedUser.avatarUrl, ownerName: updatedUser.displayName || updatedUser.username }
+                          : v
+                      ));
+
+                      // Also update myVideos list
+                      setMyVideos(prev => prev.map(v =>
+                        v.ownerUid === updatedUser.uid
+                          ? { ...v, ownerAvatar: updatedUser.avatarUrl, ownerName: updatedUser.displayName || updatedUser.username }
+                          : v
+                      ));
+                    }}
+                    onSelectVideo={setSelectedVideo} // Enable video playback
                   />
                 )}
               </View>
@@ -314,7 +353,8 @@ const AppContent = () => {
                   // Chỉ tắt Profile đi -> Lộ ra lớp bên dưới (Video Detail hoặc Discovery)
                   setViewingProfile(null);
                 }}
-                userVideos={[]}
+                userVideos={otherVideos}
+                onSelectVideo={setSelectedVideo} // Enable video playback
               />
             </View>
           )}

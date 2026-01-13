@@ -1,4 +1,4 @@
-import { db, COLLECTIONS, firebaseStorage } from '../config/firebase'; // Sử dụng instance db trực tiếp
+import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
 
 
@@ -192,24 +192,42 @@ export const searchUsers = async (query: string): Promise<User[]> => {
   }
 };
 
-export const uploadUserAvatar = async (userId: string, imageUri: string): Promise<string | null> => {
+const uploadImageToCloudinary = async (imageUri: string): Promise<string | null> => {
+  const cloudName = 'dvmfpcxz8';
+  const uploadPreset = 'tictoc_uploads';
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'upload.jpg',
+  } as any);
+  formData.append('upload_preset', uploadPreset);
+
   try {
-    // 1. Tạo tên file duy nhất (dựa trên UserID và thời gian)
-    // Đường dẫn trên Storage sẽ là: avatars/user_id/avatar_timestamp.jpg
-    const filename = `avatars/${userId}/avatar_${Date.now()}.jpg`;
-    const reference = firebaseStorage.ref(filename);
-
-    // 2. Thực hiện upload
-    // Lưu ý: putFile nhận đường dẫn file local
-    await reference.putFile(imageUri);
-
-    // 3. Lấy đường dẫn tải xuống (URL public)
-    const url = await reference.getDownloadURL();
-    return url;
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      {
+        method: 'POST',
+        body: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+    const data = await response.json();
+    if (data.secure_url) {
+      console.log('Cloudinary Image Upload Success:', data.secure_url);
+      return data.secure_url;
+    }
+    console.error('Cloudinary Upload Failed:', data);
+    return null;
   } catch (error) {
-    console.error("Upload Avatar Error:", error);
+    console.error('Cloudinary Request Error:', error);
     return null;
   }
+};
+
+export const uploadUserAvatar = async (userId: string, imageUri: string): Promise<string | null> => {
+  return await uploadImageToCloudinary(imageUri);
 };
 
 /**
@@ -220,7 +238,33 @@ export const updateUserProfile = async (
   updates: Partial<Pick<User, 'username' | 'displayName' | 'bio' | 'avatarUrl' | 'instagramHandle' | 'youtubeHandle'>>
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    await db.collection(COLLECTIONS.USERS).doc(userId).update(updates);
+    // 1. Cập nhật thông tin User chính
+    const userRef = db.collection(COLLECTIONS.USERS).doc(userId);
+    const batch = db.batch();
+    batch.update(userRef, updates);
+
+    // 2. Nếu có đổi Avatar hoặc Tên -> Cập nhật đồng loạt các Video đã đăng
+    // (Đây là cách đơn giản để xử lý data denormalization)
+    if (updates.avatarUrl || updates.displayName || updates.username) {
+      const videosSnapshot = await db
+        .collection(COLLECTIONS.VIDEOS)
+        .where('ownerUid', '==', userId)
+        .get();
+
+      if (!videosSnapshot.empty) {
+        videosSnapshot.docs.forEach(doc => {
+          const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(doc.id);
+          const videoUpdates: any = {};
+
+          if (updates.avatarUrl) videoUpdates.ownerAvatar = updates.avatarUrl;
+          if (updates.displayName || updates.username) videoUpdates.ownerName = updates.displayName || updates.username; // Ưu tiên displayName
+
+          batch.update(videoRef, videoUpdates);
+        });
+      }
+    }
+
+    await batch.commit();
     return { success: true };
   } catch (error: any) {
     console.error('Error updating profile:', error);

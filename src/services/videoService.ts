@@ -34,13 +34,13 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
       console.log('Cloudinary Upload Success:', data);
 
       // --- LOGIC TẠO THUMBNAIL TỰ ĐỘNG ---
-        const videoUrl = data.secure_url;
-        
-        // Cloudinary cho phép lấy ảnh bìa bằng cách đổi đuôi file thành .jpg
-        // Ví dụ: .../upload/v123/abc.mp4  ->  .../upload/v123/abc.jpg
-        const thumbUrl = videoUrl.replace(/\.[^/.]+$/, ".jpg"); 
+      const videoUrl = data.secure_url;
 
-        return { videoUrl, thumbUrl };
+      // Cloudinary cho phép lấy ảnh bìa bằng cách đổi đuôi file thành .jpg
+      // Ví dụ: .../upload/v123/abc.mp4  ->  .../upload/v123/abc.jpg
+      const thumbUrl = videoUrl.replace(/\.[^/.]+$/, ".jpg");
+
+      return { videoUrl, thumbUrl };
     }
     return null;
   } catch (error) {
@@ -120,16 +120,27 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
   try {
     const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
     const likeRef = videoRef.collection('likes').doc(userId);
-    const batch = db.batch(); //
+
+    // User's liked videos collection
+    const userLikedRef = db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').doc(videoId);
+
+    const batch = db.batch();
 
     if (isLiked) {
+      // Unlike
       batch.delete(likeRef);
+      batch.delete(userLikedRef);
       batch.update(videoRef, {
         likesCount: firestore.FieldValue.increment(-1)
       });
     } else {
+      // Like
       batch.set(likeRef, {
         userId,
+        createdAt: new Date().toISOString()
+      });
+      batch.set(userLikedRef, {
+        videoId,
         createdAt: new Date().toISOString()
       });
       batch.update(videoRef, {
@@ -141,6 +152,99 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 8. Xử lý Save/Unsave Video
+ */
+export const toggleSaveVideo = async (videoId: string, userId: string, isSaved: boolean) => {
+  try {
+    const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
+    const saveRef = videoRef.collection('saves').doc(userId);
+
+    // User's saved videos collection
+    const userSavedRef = db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').doc(videoId);
+
+    const batch = db.batch();
+
+    if (isSaved) {
+      // Unsave
+      batch.delete(saveRef);
+      batch.delete(userSavedRef);
+      batch.update(videoRef, {
+        savesCount: firestore.FieldValue.increment(-1)
+      });
+    } else {
+      // Save
+      batch.set(saveRef, {
+        userId,
+        createdAt: new Date().toISOString()
+      });
+      batch.set(userSavedRef, {
+        videoId,
+        createdAt: new Date().toISOString()
+      });
+      batch.update(videoRef, {
+        savesCount: firestore.FieldValue.increment(1)
+      });
+    }
+
+    await batch.commit();
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 9. Lấy danh sách video đã Like của User
+ */
+export const getLikedVideos = async (userId: string): Promise<Video[]> => {
+  try {
+    // 1. Lấy danh sách ID video đã like
+    const snapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').orderBy('createdAt', 'desc').get();
+
+    if (snapshot.empty) return [];
+
+    const videoIds = snapshot.docs.map(doc => doc.id);
+
+    // 2. Lấy chi tiết từng Video (Firestore không hỗ trợ whereIn quá 10 phần tử, nên loop đơn giản)
+    // Tối ưu: Dùng Promise.all
+    const videoPromises = videoIds.map(id => db.collection(COLLECTIONS.VIDEOS).doc(id).get());
+    const videoDocs = await Promise.all(videoPromises);
+
+    return videoDocs
+      .filter(doc => doc.exists)
+      .map(doc => ({ id: doc.id, ...doc.data() } as Video));
+
+  } catch (error) {
+    console.error('Error getting liked videos:', error);
+    return [];
+  }
+};
+
+/**
+ * 10. Lấy danh sách video đã Save của User
+ */
+export const getSavedVideos = async (userId: string): Promise<Video[]> => {
+  try {
+    const snapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').orderBy('createdAt', 'desc').get();
+
+    if (snapshot.empty) return [];
+
+    const videoIds = snapshot.docs.map(doc => doc.id);
+
+    const videoPromises = videoIds.map(id => db.collection(COLLECTIONS.VIDEOS).doc(id).get());
+    const videoDocs = await Promise.all(videoPromises);
+
+    return videoDocs
+      .filter(doc => doc.exists)
+      .map(doc => ({ id: doc.id, ...doc.data() } as Video));
+
+  } catch (error) {
+    console.error('Error getting saved videos:', error);
+    return [];
   }
 };
 

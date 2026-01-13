@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar, BackHandler } from 'react-native';
-// Thêm icon Bookmark
 import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Umbrella, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal, Bookmark, Menu } from 'lucide-react-native';
 import { User, Video } from '../types/type';
 import * as authService from '../services/authService';
 import * as userService from '../services/userService';
+import * as videoService from '../services/videoService'; // Import videoService
 import EditProfileView from './EditProfileView';
 import SettingsView from './SettingsView';
 import DigitalWellbeingView from './DigitalWellbeingView';
@@ -22,6 +22,8 @@ interface ProfileViewProps {
   onBack?: () => void;
   onMessage?: (user: User) => void;
   onSubViewChange?: (isSubView: boolean) => void;
+  onUserUpdate?: (user: User) => void;
+  onSelectVideo?: (video: Video) => void;
 }
 
 const ProfileView: React.FC<ProfileViewProps> = ({
@@ -31,7 +33,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   isOwnProfile = true,
   onBack,
   onMessage,
-  onSubViewChange
+  onSubViewChange,
+  onUserUpdate,
+  onSelectVideo
 }) => {
   const [currentUserData, setCurrentUserData] = useState(initialUser);
   const [isEditing, setIsEditing] = useState(false);
@@ -40,9 +44,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
 
-  // Settings Navigation Stack
-  const [settingsPath, setSettingsPath] = useState<string[]>([]); // [] = Profile, ['settings'] = Settings, ['settings', 'digital_wellbeing'] ...
+  // New State for Tabs
+  const [likedVideos, setLikedVideos] = useState<Video[]>([]);
+  const [savedVideos, setSavedVideos] = useState<Video[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
 
+  // Settings Navigation Stack
+  const [settingsPath, setSettingsPath] = useState<string[]>([]);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -56,7 +64,27 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     setFollowerCount(initialUser.followersCount);
   }, [initialUser]);
 
-  // Handle Android Back Button to navigate settings stack
+  // Fetch videos when tab changes
+  useEffect(() => {
+    const fetchTabVideos = async () => {
+      if (!initialUser.uid) return;
+
+      if (activeTab === 'liked' && likedVideos.length === 0) {
+        setLoadingVideos(true);
+        const vids = await videoService.getLikedVideos(initialUser.uid);
+        setLikedVideos(vids);
+        setLoadingVideos(false);
+      } else if (activeTab === 'locked' && savedVideos.length === 0) { // 'locked' tab for Saved
+        setLoadingVideos(true);
+        const vids = await videoService.getSavedVideos(initialUser.uid);
+        setSavedVideos(vids);
+        setLoadingVideos(false);
+      }
+    };
+
+    fetchTabVideos();
+  }, [activeTab, initialUser.uid]);
+
   useEffect(() => {
     const backAction = () => {
       if (settingsPath.length > 0) {
@@ -70,7 +98,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     return () => backHandler.remove();
   }, [settingsPath]);
 
-  // Sync sub-view state with parent (App.tsx) to hide/show BottomNav
   useEffect(() => {
     if (onSubViewChange) {
       onSubViewChange(settingsPath.length > 0);
@@ -79,6 +106,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
   const handleUpdateSuccess = (updatedUser: User) => {
     setCurrentUserData(updatedUser);
+    if (onUserUpdate) onUserUpdate(updatedUser);
   };
 
   const handleLogout = async () => {
@@ -86,6 +114,26 @@ const ProfileView: React.FC<ProfileViewProps> = ({
       { text: "Cancel", style: "cancel" },
       { text: "Log Out", style: "destructive", onPress: async () => authService.logoutUser() }
     ]);
+  };
+
+  // Determine which videos to show
+  const getDisplayVideos = () => {
+    switch (activeTab) {
+      case 'liked': return likedVideos;
+      case 'locked': return savedVideos;
+      case 'videos': default: return userVideos;
+    }
+  };
+
+  const displayVideos = getDisplayVideos();
+
+  // Helper to get thumbnail
+  const getThumbnail = (video: Video) => {
+    if (video.thumbUrl) return video.thumbUrl;
+    if (video.videoUrl) {
+      return video.videoUrl.replace(/\.[^/.]+$/, ".jpg");
+    }
+    return `https://picsum.photos/seed/${video.id}/300/400`;
   };
 
   if (isEditing) {
@@ -98,7 +146,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     );
   }
 
-  // --- SETTINGS NAVIGATION RENDER ---
   const currentView = settingsPath[settingsPath.length - 1];
 
   if (currentView === 'daily_screen_time') {
@@ -132,8 +179,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     );
   }
 
-  // --- NORMAL PROFILE RENDER ---
-
   const checkFollowStatus = async () => {
     if (!currentUserId) return;
     try {
@@ -145,13 +190,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleFollowToggle = async () => {
-    if (!currentUserId) {
-      console.log('No currentUserId');
-      return;
-    }
+    if (!currentUserId) return;
     setFollowLoading(true);
     try {
-      console.log(`Attempting to ${isFollowing ? 'unfollow' : 'follow'} user:`, currentUserData.uid);
       if (isFollowing) {
         await userService.unfollowUser(currentUserId, currentUserData.uid);
         setIsFollowing(false);
@@ -162,7 +203,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         setFollowerCount(prev => prev + 1);
       }
     } catch (error: any) {
-      console.error('Follow toggle error:', error);
       Alert.alert('Error', error.message || 'Failed to update follow status');
     } finally {
       setFollowLoading(false);
@@ -173,14 +213,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     if (onMessage) onMessage(currentUserData);
   };
 
-  const handleShare = () => {
-    Alert.alert('Share Profile', `Share @${currentUserData.username}'s profile`);
-  };
-
   return (
     <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" />
-      {/* Header - Giống ảnh mẫu */}
+
       <View style={styles.header}>
         {isOwnProfile ? (
           <TouchableOpacity style={styles.headerIconLeft}>
@@ -193,7 +229,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         )}
 
         <View style={styles.titleWrap}>
-          {/* Tên hiển thị ở giữa + icon mũi tên xuống */}
           <Text style={styles.username}>{currentUserData.displayName || currentUserData.username}</Text>
           <ChevronDown size={14} color="#000" style={{ marginTop: 2 }} />
         </View>
@@ -204,12 +239,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
               <TouchableOpacity onPress={() => setSettingsPath(['digital_wellbeing'])} style={styles.headerIcon}>
                 <Umbrella size={24} color="#000" />
               </TouchableOpacity>
-
-              {/* Main Menu Button (3 lines) -> To Settings */}
-              <TouchableOpacity
-                onPress={() => setSettingsPath(['settings'])}
-                style={styles.headerIcon}
-              >
+              <TouchableOpacity onPress={() => setSettingsPath(['settings'])} style={styles.headerIcon}>
                 <Menu size={24} color="#000" />
               </TouchableOpacity>
             </>
@@ -220,8 +250,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           )}
         </View>
       </View>
-
-
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.profileInfo}>
@@ -261,7 +289,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                 </TouchableOpacity>
               </>
             ) : (
-              // ... giữ nguyên logic cho profile người khác ...
               <>
                 <TouchableOpacity
                   style={[styles.followBtn, isFollowing && styles.followingBtn]}
@@ -293,7 +320,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
         {/* Tabs Navigation */}
         <View style={styles.tabs}>
-          {/* Tab 1: Video */}
           <TouchableOpacity
             style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
             onPress={() => setActiveTab('videos')}
@@ -301,7 +327,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
             <Grid size={24} color={activeTab === 'videos' ? "#000" : "#ccc"} />
           </TouchableOpacity>
 
-          {/* Tab 2: Đã lưu (Private) */}
           <TouchableOpacity
             style={[styles.tab, activeTab === 'locked' && styles.tabActive]}
             onPress={() => setActiveTab('locked')}
@@ -309,7 +334,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
             <Bookmark size={24} color={activeTab === 'locked' ? "#000" : "#ccc"} />
           </TouchableOpacity>
 
-          {/* Tab 3: Đã thích (Heart) */}
           <TouchableOpacity
             style={[styles.tab, activeTab === 'liked' && styles.tabActive]}
             onPress={() => setActiveTab('liked')}
@@ -320,12 +344,19 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
         {/* Grid Videos */}
         <View style={styles.grid}>
-          {userVideos.length > 0 ? (
-            userVideos.map((video) => (
-              <TouchableOpacity key={video.id} style={styles.gridItem}>
+          {loadingVideos ? (
+            <ActivityIndicator size="large" color="#000" style={{ marginTop: 20, width: '100%' }} />
+          ) : displayVideos.length > 0 ? (
+            displayVideos.map((video) => (
+              <TouchableOpacity
+                key={video.id}
+                style={styles.gridItem}
+                onPress={() => onSelectVideo && onSelectVideo(video)}
+              >
                 <Image
-                  source={{ uri: `https://picsum.photos/seed/${video.id}/300/400` }}
+                  source={{ uri: getThumbnail(video) }}
                   style={styles.gridImg}
+                  resizeMode="cover"
                 />
                 <View style={styles.playCountBadge}>
                   <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
@@ -333,12 +364,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({
               </TouchableOpacity>
             ))
           ) : (
-            // Render placeholder nếu không có video (để test giao diện)
-            [1, 2, 3, 4, 5, 6].map((i) => (
-              <View key={i} style={styles.gridItem}>
-                <View style={[styles.gridImg, { backgroundColor: '#e1e1e1' }]} />
-              </View>
-            ))
+            <View style={styles.noVideos}>
+              <Text style={styles.noVideosText}>
+                {activeTab === 'liked' ? "No liked videos" :
+                  activeTab === 'locked' ? "No saved videos" :
+                    "No videos yet"}
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -349,92 +381,46 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#e0e0e0',
-    position: 'relative',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
+    borderBottomWidth: 0.5, borderBottomColor: '#e0e0e0', position: 'relative',
   },
   headerIconLeft: { minWidth: 40, zIndex: 1, },
   headerRight: { flexDirection: 'row', alignItems: 'center', minWidth: 40, justifyContent: 'flex-end', gap: 15, zIndex: 1, },
   headerIcon: { padding: 2 },
   titleWrap: {
-    // 2. Sửa lại hoàn toàn đoạn này
-    position: 'absolute', // Tách ra khỏi dòng chảy layout bình thường
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0, // Căng full 4 góc của header
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Căn giữa tuyệt đối
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
   },
   username: { fontSize: 17, fontWeight: '700', marginRight: 4, color: '#000' },
-
   profileInfo: { alignItems: 'center', paddingTop: 20, paddingBottom: 10 },
   avatarContainer: { marginBottom: 12 },
   avatar: { width: 96, height: 96, borderRadius: 48 },
-
   handle: { fontSize: 17, fontWeight: '600', marginBottom: 16 },
-
   stats: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   statItem: { alignItems: 'center', paddingHorizontal: 16 },
   statVal: { fontSize: 17, fontWeight: '700', color: '#000' },
   statLab: { fontSize: 13, color: '#888', marginTop: 2 },
   divider: { width: 1, height: 15, backgroundColor: '#e0e0e0' },
-
   actions: { flexDirection: 'row', paddingHorizontal: 40, gap: 6, marginBottom: 12 },
-
-  // Style cho nút Edit Profile (giống ảnh)
-  editBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e1e1e1',
-    height: 44,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff'
-  },
+  editBtn: { flex: 1, borderWidth: 1, borderColor: '#e1e1e1', height: 44, borderRadius: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   editBtnText: { color: '#000', fontWeight: '600', fontSize: 15 },
-
-  // Style cho nút Bookmark vuông bên cạnh
-  bookmarkBtn: {
-    width: 44,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#e1e1e1',
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff'
-  },
-
-  // Styles cho trạng thái người khác (không đổi nhiều)
+  bookmarkBtn: { width: 44, height: 44, borderWidth: 1, borderColor: '#e1e1e1', borderRadius: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   followBtn: { flex: 1, backgroundColor: '#fe2c55', height: 44, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
   followBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   followingBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e1e1e1' },
   followingBtnText: { color: '#000' },
   messageBtn: { width: 44, height: 44, borderWidth: 1, borderColor: '#e1e1e1', borderRadius: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   moreBtn: { width: 44, height: 44, borderWidth: 1, borderColor: '#e1e1e1', borderRadius: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-
   bio: { fontSize: 14, color: '#000', marginTop: 8, paddingHorizontal: 30, textAlign: 'center' },
-
-  // Tabs
   tabs: { flexDirection: 'row', borderTopWidth: 0.5, borderTopColor: '#e0e0e0', marginTop: 10 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   tabActive: { borderBottomWidth: 2, borderBottomColor: '#000' },
-
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   gridItem: { width: COL_WIDTH, height: COL_WIDTH * 1.33, borderWidth: 0.5, borderColor: '#fff' },
   gridImg: { width: '100%', height: '100%', backgroundColor: '#f0f0f0' },
   playCountBadge: { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', alignItems: 'center' },
   playCountText: { color: '#fff', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 2 },
-
   noVideos: { width: '100%', padding: 40, alignItems: 'center' },
   noVideosText: { color: '#888' }
 });
