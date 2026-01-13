@@ -251,7 +251,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
         <View style={styles.profileInfo}>
           <View style={styles.avatarContainer}>
             <Image source={{ uri: currentUserData.avatarUrl }} style={styles.avatar} />

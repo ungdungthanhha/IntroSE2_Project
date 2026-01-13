@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   playIconContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Sidebar
-  rightActions: { position: 'absolute', right: 8, bottom: 90, alignItems: 'center', gap: 20 },
+  rightActions: { position: 'absolute', right: 8, bottom: 30, alignItems: 'center', gap: 10 },
   action: { alignItems: 'center' },
   actionText: { color: '#fff', fontSize: 12, fontWeight: 'bold', marginTop: 4 },
 

@@ -283,6 +283,7 @@ const AppContent = () => {
                           snapToAlignment="start"
                           decelerationRate="fast"
                           pagingEnabled
+                          disableIntervalMomentum={true}
                           showsVerticalScrollIndicator={false}
                           onViewableItemsChanged={onViewableItemsChanged}
                           viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
