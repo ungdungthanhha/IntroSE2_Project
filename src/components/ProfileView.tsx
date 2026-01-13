@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar, BackHandler } from 'react-native';
 // Thêm icon Bookmark
-import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Timer, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal, Bookmark } from 'lucide-react-native';
+import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Umbrella, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal, Bookmark, Menu } from 'lucide-react-native';
 import { User, Video } from '../types/type';
 import * as authService from '../services/authService';
 import * as userService from '../services/userService';
 import EditProfileView from './EditProfileView';
-import TimeLimitModal from './TimeLimitModal';
+import SettingsView from './SettingsView';
+import DigitalWellbeingView from './DigitalWellbeingView';
+import DailyScreenTimeView from './DailyScreenTimeView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -19,25 +21,30 @@ interface ProfileViewProps {
   isOwnProfile?: boolean;
   onBack?: () => void;
   onMessage?: (user: User) => void;
+  onSubViewChange?: (isSubView: boolean) => void;
 }
 
-const ProfileView: React.FC<ProfileViewProps> = ({ 
+const ProfileView: React.FC<ProfileViewProps> = ({
   user: initialUser,
-  userVideos, 
+  userVideos,
   currentUserId,
   isOwnProfile = true,
   onBack,
-  onMessage 
+  onMessage,
+  onSubViewChange
 }) => {
   const [currentUserData, setCurrentUserData] = useState(initialUser);
   const [isEditing, setIsEditing] = useState(false);
-  const [showTimeLimitModal, setShowTimeLimitModal] = useState(false);
   const [activeTab, setActiveTab] = useState('videos');
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
+
+  // Settings Navigation Stack
+  const [settingsPath, setSettingsPath] = useState<string[]>([]); // [] = Profile, ['settings'] = Settings, ['settings', 'digital_wellbeing'] ...
+
   const insets = useSafeAreaInsets();
-  
+
   useEffect(() => {
     if (!isOwnProfile && currentUserId) {
       checkFollowStatus();
@@ -49,19 +56,83 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     setFollowerCount(initialUser.followersCount);
   }, [initialUser]);
 
+  // Handle Android Back Button to navigate settings stack
+  useEffect(() => {
+    const backAction = () => {
+      if (settingsPath.length > 0) {
+        setSettingsPath(prev => prev.slice(0, -1));
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [settingsPath]);
+
+  // Sync sub-view state with parent (App.tsx) to hide/show BottomNav
+  useEffect(() => {
+    if (onSubViewChange) {
+      onSubViewChange(settingsPath.length > 0);
+    }
+  }, [settingsPath, onSubViewChange]);
+
   const handleUpdateSuccess = (updatedUser: User) => {
     setCurrentUserData(updatedUser);
   };
 
+  const handleLogout = async () => {
+    Alert.alert("Logout", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log Out", style: "destructive", onPress: async () => authService.logoutUser() }
+    ]);
+  };
+
   if (isEditing) {
     return (
-      <EditProfileView 
-        user={currentUserData} 
-        onClose={() => setIsEditing(false)} 
+      <EditProfileView
+        user={currentUserData}
+        onClose={() => setIsEditing(false)}
         onUpdateSuccess={handleUpdateSuccess}
       />
     );
   }
+
+  // --- SETTINGS NAVIGATION RENDER ---
+  const currentView = settingsPath[settingsPath.length - 1];
+
+  if (currentView === 'daily_screen_time') {
+    return (
+      <View style={{ flex: 1, paddingTop: insets.top }}>
+        <DailyScreenTimeView onBack={() => setSettingsPath(prev => prev.slice(0, -1))} />
+      </View>
+    );
+  }
+
+  if (currentView === 'digital_wellbeing') {
+    return (
+      <View style={{ flex: 1, paddingTop: insets.top }}>
+        <DigitalWellbeingView
+          onBack={() => setSettingsPath(prev => prev.slice(0, -1))}
+          onNavigate={(screen) => setSettingsPath(prev => [...prev, screen])}
+        />
+      </View>
+    );
+  }
+
+  if (currentView === 'settings') {
+    return (
+      <View style={{ flex: 1, paddingTop: insets.top }}>
+        <SettingsView
+          onBack={() => setSettingsPath([])}
+          onNavigate={(screen) => setSettingsPath(prev => [...prev, screen])}
+          onLogout={handleLogout}
+        />
+      </View>
+    );
+  }
+
+  // --- NORMAL PROFILE RENDER ---
 
   const checkFollowStatus = async () => {
     if (!currentUserId) return;
@@ -100,16 +171,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const handleShare = () => {
     Alert.alert('Share Profile', `Share @${currentUserData.username}'s profile`);
   };
-  
-  const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Log Out", style: "destructive", onPress: async () => authService.logoutUser() }
-    ]);
-  };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 10}]}>
+    <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       {/* Header - Giống ảnh mẫu */}
       <View style={styles.header}>
@@ -130,29 +194,29 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         </View>
 
         <View style={styles.headerRight}>
-            {isOwnProfile ? (
-              <>
-                {/* Giả lập icon cái dù/mắt (nếu cần) hoặc chỉ để Settings */}
-                <TouchableOpacity onPress={handleLogout} style={styles.headerIcon}>
-                    <Settings size={24} color="#000" />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => setShowTimeLimitModal(true)} 
-                  style={styles.headerIcon}
-                >
-                  <Timer size={24} color="#000" />
-        </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity style={styles.headerIcon}>
-                <MoreHorizontal size={24} color="#000" />
+          {isOwnProfile ? (
+            <>
+              <TouchableOpacity onPress={() => setSettingsPath(['digital_wellbeing'])} style={styles.headerIcon}>
+                <Umbrella size={24} color="#000" />
               </TouchableOpacity>
-            )}
+
+              {/* Main Menu Button (3 lines) -> To Settings */}
+              <TouchableOpacity
+                onPress={() => setSettingsPath(['settings'])}
+                style={styles.headerIcon}
+              >
+                <Menu size={24} color="#000" />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.headerIcon}>
+              <MoreHorizontal size={24} color="#000" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      <TimeLimitModal visible={showTimeLimitModal} onClose={() => setShowTimeLimitModal(false)} />
+
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.profileInfo}>
@@ -194,8 +258,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({
             ) : (
               // ... giữ nguyên logic cho profile người khác ...
               <>
-                <TouchableOpacity 
-                  style={[styles.followBtn, isFollowing && styles.followingBtn]} 
+                <TouchableOpacity
+                  style={[styles.followBtn, isFollowing && styles.followingBtn]}
                   onPress={handleFollowToggle}
                   disabled={followLoading}
                 >
@@ -203,14 +267,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                     <ActivityIndicator size="small" color={isFollowing ? "#000" : "#fff"} />
                   ) : (
                     <>
-                       <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+                      <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
                         {isFollowing ? 'Following' : 'Follow'}
                       </Text>
                     </>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
-                   <MessageCircle size={20} color="#000" />
+                  <MessageCircle size={20} color="#000" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.moreBtn}>
                   <ChevronDown size={20} color="#000" />
@@ -225,7 +289,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         {/* Tabs Navigation */}
         <View style={styles.tabs}>
           {/* Tab 1: Video */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
             onPress={() => setActiveTab('videos')}
           >
@@ -233,7 +297,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           </TouchableOpacity>
 
           {/* Tab 2: Đã lưu (Private) */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.tab, activeTab === 'locked' && styles.tabActive]}
             onPress={() => setActiveTab('locked')}
           >
@@ -241,7 +305,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           </TouchableOpacity>
 
           {/* Tab 3: Đã thích (Heart) */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.tab, activeTab === 'liked' && styles.tabActive]}
             onPress={() => setActiveTab('liked')}
           >
@@ -254,64 +318,64 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           {userVideos.length > 0 ? (
             userVideos.map((video) => (
               <TouchableOpacity key={video.id} style={styles.gridItem}>
-                <Image 
-                  source={{ uri: `https://picsum.photos/seed/${video.id}/300/400` }} 
-                  style={styles.gridImg} 
+                <Image
+                  source={{ uri: `https://picsum.photos/seed/${video.id}/300/400` }}
+                  style={styles.gridImg}
                 />
-                 <View style={styles.playCountBadge}>
-                     <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
-                 </View>
+                <View style={styles.playCountBadge}>
+                  <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
+                </View>
               </TouchableOpacity>
             ))
           ) : (
-             // Render placeholder nếu không có video (để test giao diện)
-             [1,2,3,4,5,6].map((i) => (
-                <View key={i} style={styles.gridItem}>
-                    <View style={[styles.gridImg, {backgroundColor: '#e1e1e1'}]} />
-                </View>
-             ))
+            // Render placeholder nếu không có video (để test giao diện)
+            [1, 2, 3, 4, 5, 6].map((i) => (
+              <View key={i} style={styles.gridItem}>
+                <View style={[styles.gridImg, { backgroundColor: '#e1e1e1' }]} />
+              </View>
+            ))
           )}
         </View>
       </ScrollView>
-    </View>
+    </View >
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 16, 
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 10,
-    borderBottomWidth: 0.5, 
-    borderBottomColor: '#e0e0e0' ,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#e0e0e0',
     position: 'relative',
   },
   headerIconLeft: { minWidth: 40, zIndex: 1, },
   headerRight: { flexDirection: 'row', alignItems: 'center', minWidth: 40, justifyContent: 'flex-end', gap: 15, zIndex: 1, },
   headerIcon: { padding: 2 },
-  titleWrap: { 
+  titleWrap: {
     // 2. Sửa lại hoàn toàn đoạn này
     position: 'absolute', // Tách ra khỏi dòng chảy layout bình thường
     left: 0,
     right: 0,
     top: 0,
     bottom: 0, // Căng full 4 góc của header
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center', // Căn giữa tuyệt đối
   },
   username: { fontSize: 17, fontWeight: '700', marginRight: 4, color: '#000' },
-  
+
   profileInfo: { alignItems: 'center', paddingTop: 20, paddingBottom: 10 },
   avatarContainer: { marginBottom: 12 },
   avatar: { width: 96, height: 96, borderRadius: 48 },
-  
+
   handle: { fontSize: 17, fontWeight: '600', marginBottom: 16 },
-  
+
   stats: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   statItem: { alignItems: 'center', paddingHorizontal: 16 },
   statVal: { fontSize: 17, fontWeight: '700', color: '#000' },
@@ -319,20 +383,20 @@ const styles = StyleSheet.create({
   divider: { width: 1, height: 15, backgroundColor: '#e0e0e0' },
 
   actions: { flexDirection: 'row', paddingHorizontal: 40, gap: 6, marginBottom: 12 },
-  
+
   // Style cho nút Edit Profile (giống ảnh)
-  editBtn: { 
-    flex: 1, 
-    borderWidth: 1, 
-    borderColor: '#e1e1e1', 
-    height: 44, 
-    borderRadius: 4, 
-    alignItems: 'center', 
+  editBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e1e1e1',
+    height: 44,
+    borderRadius: 4,
+    alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff'
   },
   editBtnText: { color: '#000', fontWeight: '600', fontSize: 15 },
-  
+
   // Style cho nút Bookmark vuông bên cạnh
   bookmarkBtn: {
     width: 44,
@@ -354,18 +418,18 @@ const styles = StyleSheet.create({
   moreBtn: { width: 44, height: 44, borderWidth: 1, borderColor: '#e1e1e1', borderRadius: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
 
   bio: { fontSize: 14, color: '#000', marginTop: 8, paddingHorizontal: 30, textAlign: 'center' },
-  
+
   // Tabs
   tabs: { flexDirection: 'row', borderTopWidth: 0.5, borderTopColor: '#e0e0e0', marginTop: 10 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   tabActive: { borderBottomWidth: 2, borderBottomColor: '#000' },
-  
+
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   gridItem: { width: COL_WIDTH, height: COL_WIDTH * 1.33, borderWidth: 0.5, borderColor: '#fff' },
   gridImg: { width: '100%', height: '100%', backgroundColor: '#f0f0f0' },
   playCountBadge: { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', alignItems: 'center' },
   playCountText: { color: '#fff', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 2 },
-  
+
   noVideos: { width: '100%', padding: 40, alignItems: 'center' },
   noVideosText: { color: '#888' }
 });

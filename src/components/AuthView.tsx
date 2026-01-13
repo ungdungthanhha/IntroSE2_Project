@@ -72,11 +72,7 @@ const AuthView = () => {
     try {
       const result = await authService.loginUser(cleanEmail, password);
       if (!result.success) {
-        if (result.status === 'requires_verification') {
-          Alert.alert('Verification Sent', result.error);
-        } else {
-          Alert.alert('Login Failed', result.error);
-        }
+        Alert.alert('Login Failed', result.error);
       }
     } catch (error: any) {
       Alert.alert('Error', error.message);

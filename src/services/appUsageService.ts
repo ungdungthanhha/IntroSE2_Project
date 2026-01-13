@@ -13,8 +13,11 @@ interface UsageData {
 
 export interface TimeLimitSettings {
   enabled: boolean;
-  limitMinutes: number; // Daily limit in minutes
+  limitMinutes: number; // Daily limit in minutes (or default for all days)
   reminderMinutes: number; // Reminder before limit
+  isCustomDays?: boolean; // If true, use customDailyLimits
+  customDailyLimits?: { [key: string]: number }; // Map "Monday" -> 60
+  passcode?: string; // 4-digit PIN
 }
 
 // Get current date string
@@ -28,11 +31,11 @@ export const getTodayUsage = async (): Promise<UsageData> => {
   try {
     const today = getDateString();
     const data = await AsyncStorage.getItem(`${USAGE_KEY}_${today}`);
-    
+
     if (data) {
       return JSON.parse(data);
     }
-    
+
     return {
       date: today,
       totalMinutes: 0,
@@ -52,8 +55,16 @@ export const getTodayUsage = async (): Promise<UsageData> => {
 export const startSession = async (): Promise<void> => {
   try {
     const usage = await getTodayUsage();
+
+    // Check if last session is still open
+    const lastSession = usage.sessions[usage.sessions.length - 1];
+    if (lastSession && !lastSession.end) {
+      // Session already running, do nothing
+      return;
+    }
+
     usage.sessions.push({ start: Date.now() });
-    
+
     await AsyncStorage.setItem(`${USAGE_KEY}_${usage.date}`, JSON.stringify(usage));
   } catch (error) {
     console.error('Error starting session:', error);
@@ -65,16 +76,16 @@ export const endSession = async (): Promise<number> => {
   try {
     const usage = await getTodayUsage();
     const lastSession = usage.sessions[usage.sessions.length - 1];
-    
+
     if (lastSession && !lastSession.end) {
       lastSession.end = Date.now();
       const sessionMinutes = Math.floor((lastSession.end - lastSession.start) / 60000);
       usage.totalMinutes += sessionMinutes;
-      
+
       await AsyncStorage.setItem(`${USAGE_KEY}_${usage.date}`, JSON.stringify(usage));
       return usage.totalMinutes;
     }
-    
+
     return usage.totalMinutes;
   } catch (error) {
     console.error('Error ending session:', error);
@@ -87,11 +98,11 @@ export const getCurrentSessionDuration = async (): Promise<number> => {
   try {
     const usage = await getTodayUsage();
     const lastSession = usage.sessions[usage.sessions.length - 1];
-    
+
     if (lastSession && !lastSession.end) {
       return Math.floor((Date.now() - lastSession.start) / 60000);
     }
-    
+
     return 0;
   } catch (error) {
     return 0;
@@ -122,22 +133,28 @@ export const setTimeLimit = async (settings: TimeLimitSettings): Promise<void> =
 export const getTimeLimit = async (): Promise<TimeLimitSettings> => {
   try {
     const data = await AsyncStorage.getItem(LIMIT_KEY);
-    
+
     if (data) {
       return JSON.parse(data);
     }
-    
+
     // Default settings
     return {
       enabled: false,
       limitMinutes: 60, // 1 hour default
-      reminderMinutes: 10 // 10 minutes before limit
+      reminderMinutes: 10, // 10 minutes before limit
+      isCustomDays: false,
+      customDailyLimits: {},
+      passcode: undefined
     };
   } catch (error) {
     return {
       enabled: false,
       limitMinutes: 60,
-      reminderMinutes: 10
+      reminderMinutes: 10,
+      isCustomDays: false,
+      customDailyLimits: {},
+      passcode: undefined
     };
   }
 };
@@ -146,13 +163,24 @@ export const getTimeLimit = async (): Promise<TimeLimitSettings> => {
 export const isLimitExceeded = async (): Promise<boolean> => {
   try {
     const settings = await getTimeLimit();
-    
+
     if (!settings.enabled) {
       return false;
     }
-    
+
+    let limit = settings.limitMinutes;
+
+    // Handle custom days
+    if (settings.isCustomDays && settings.customDailyLimits) {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = days[new Date().getDay()];
+      if (settings.customDailyLimits[todayName]) {
+        limit = settings.customDailyLimits[todayName];
+      }
+    }
+
     const totalUsage = await getTotalUsageMinutes();
-    return totalUsage >= settings.limitMinutes;
+    return totalUsage >= limit;
   } catch (error) {
     return false;
   }
@@ -162,14 +190,24 @@ export const isLimitExceeded = async (): Promise<boolean> => {
 export const shouldShowReminder = async (): Promise<boolean> => {
   try {
     const settings = await getTimeLimit();
-    
+
     if (!settings.enabled) {
       return false;
     }
-    
+
+    let limit = settings.limitMinutes;
+
+    if (settings.isCustomDays && settings.customDailyLimits) {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = days[new Date().getDay()];
+      if (settings.customDailyLimits[todayName]) {
+        limit = settings.customDailyLimits[todayName];
+      }
+    }
+
     const totalUsage = await getTotalUsageMinutes();
-    const remainingMinutes = settings.limitMinutes - totalUsage;
-    
+    const remainingMinutes = limit - totalUsage;
+
     return remainingMinutes > 0 && remainingMinutes <= settings.reminderMinutes;
   } catch (error) {
     return false;
@@ -180,13 +218,23 @@ export const shouldShowReminder = async (): Promise<boolean> => {
 export const getRemainingTime = async (): Promise<number> => {
   try {
     const settings = await getTimeLimit();
-    
+
     if (!settings.enabled) {
       return -1; // -1 means no limit
     }
-    
+
+    let limit = settings.limitMinutes;
+
+    if (settings.isCustomDays && settings.customDailyLimits) {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = days[new Date().getDay()];
+      if (settings.customDailyLimits[todayName]) {
+        limit = settings.customDailyLimits[todayName];
+      }
+    }
+
     const totalUsage = await getTotalUsageMinutes();
-    return Math.max(0, settings.limitMinutes - totalUsage);
+    return Math.max(0, limit - totalUsage);
   } catch (error) {
     return -1;
   }
@@ -197,14 +245,14 @@ export const formatTime = (minutes: number): string => {
   if (minutes < 60) {
     return `${minutes} phút`;
   }
-  
+
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  
+
   if (mins === 0) {
     return `${hours} giờ`;
   }
-  
+
   return `${hours} giờ ${mins} phút`;
 };
 

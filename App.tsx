@@ -19,6 +19,7 @@ import LiveView from './src/components/LiveView';
 import AuthView from './src/components/AuthView';
 import VerifyEmailView from './src/components/VerifyEmailView';
 import DiscoveryView from './src/components/DiscoveryView';
+import TimeLimitExceededView from './src/components/TimeLimitExceededView';
 
 import { AppTab, User, Video as VideoType } from './src/types/type';
 import { MOCK_VIDEOS } from './src/constants';
@@ -34,7 +35,7 @@ const AppContent = () => {
   const [videos, setVideos] = useState<VideoType[]>([]);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
+
   // State điều hướng
   const [viewingProfile, setViewingProfile] = useState<User | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoType | null>(null);
@@ -43,8 +44,15 @@ const AppContent = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
 
+  // Mới: State để biết Profile đang ở màn hình con (như Settings)
+  const [isProfileSubView, setIsProfileSubView] = useState(false);
+
   const ACTUAL_VIDEO_HEIGHT = WINDOW_HEIGHT - insets.top - BOTTOM_NAV_HEIGHT;
   const [setupStatus, setSetupStatus] = useState("Initializing...");
+
+  // Screen Time State
+  const [isTimeLimitReached, setIsTimeLimitReached] = useState(false);
+  const [isTimeLimitIgnored, setIsTimeLimitIgnored] = useState(false);
 
   // --- LOGIC DATABASE & AUTH (GIỮ NGUYÊN) ---
   const ensureUserDoc = async (user: any): Promise<boolean> => {
@@ -99,6 +107,45 @@ const AppContent = () => {
     });
     return subscriber;
   }, []);
+
+  // --- APP USAGE TRACKING ---
+  const { startSession, endSession, isLimitExceeded } = require('./src/services/appUsageService');
+  const { AppState } = require('react-native');
+
+  useEffect(() => {
+    // Start initial session
+    startSession();
+
+    const subscription = AppState.addEventListener('change', (nextAppState: any) => {
+      if (nextAppState === 'active') {
+        startSession();
+      } else if (nextAppState.match(/inactive|background/)) {
+        endSession();
+      }
+    });
+
+    return () => {
+      endSession();
+      subscription.remove();
+    };
+  }, []);
+
+  // Check Time Limit Periodically
+  useEffect(() => {
+    const checkLimit = async () => {
+      // If already ignored for this session/day, don't check
+      if (isTimeLimitIgnored) return;
+
+      const exceeded = await isLimitExceeded();
+      setIsTimeLimitReached(exceeded);
+    };
+
+    // Check immediately and then every 10 seconds
+    checkLimit();
+    const interval = setInterval(checkLimit, 10000);
+
+    return () => clearInterval(interval);
+  }, [isTimeLimitIgnored]);
 
   const fetchVideos = async () => {
     setIsLoading(true);
@@ -155,25 +202,25 @@ const AppContent = () => {
         // === MAIN CONTENT STRUCTURE ===
         // Chúng ta dùng View bọc ngoài để xếp lớp (Layer)
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-          
+
           {/* LAYER 1: CONTENT (HOME / DISCOVERY / VIDEO DETAIL) */}
           {selectedVideo ? (
             // --- TRƯỜNG HỢP: ĐANG XEM VIDEO CHI TIẾT ---
             <View style={{ flex: 1, backgroundColor: '#000' }}>
               <StatusBar barStyle="light-content" />
-              <VideoItem 
-                video={selectedVideo} 
+              <VideoItem
+                video={selectedVideo}
                 shouldLoad={true}
-                isActive={true} 
+                isActive={true}
                 itemHeight={WINDOW_HEIGHT}
                 // Khi bấm avatar trong video -> Set viewingProfile -> Profile sẽ hiện đè lên (Layer 2)
-                onViewProfile={setViewingProfile} 
+                onViewProfile={setViewingProfile}
               />
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 999, padding: 8 }}
                 onPress={handleBackFromDetail}
               >
-                <ArrowLeft color="#fff" size={30} style={{ shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 2 }}/>
+                <ArrowLeft color="#fff" size={30} style={{ shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 2 }} />
               </TouchableOpacity>
             </View>
           ) : (
@@ -182,7 +229,7 @@ const AppContent = () => {
               <View style={styles.content}>
                 {activeTab === AppTab.HOME && (
                   <View style={styles.homeContainer}>
-                     {/* Header Home */}
+                    {/* Header Home */}
                     <View style={[styles.homeHeader, { top: insets.top + 10 }]}>
                       <View style={styles.headerSide}><TouchableOpacity onPress={() => setActiveTab(AppTab.LIVE)}><Tv color="#fff" size={24} /></TouchableOpacity></View>
                       <View style={styles.headerCenter}>
@@ -197,7 +244,7 @@ const AppContent = () => {
 
                     {/* Video List */}
                     <View style={{ marginTop: insets.top, height: ACTUAL_VIDEO_HEIGHT }}>
-                      {isLoading ? <ActivityIndicator style={{marginTop: 50}} color="#fe2c55" /> : (
+                      {isLoading ? <ActivityIndicator style={{ marginTop: 50 }} color="#fe2c55" /> : (
                         <FlatList
                           data={videos}
                           keyExtractor={item => item.id}
@@ -226,29 +273,30 @@ const AppContent = () => {
                 )}
 
                 {activeTab === AppTab.DISCOVER && (
-                  <DiscoveryView 
-                    allVideos={videos} 
+                  <DiscoveryView
+                    allVideos={videos}
                     onSelectVideo={handleSelectSearchedVideo}
-                    onSelectUser={handleSelectSearchedUser} 
+                    onSelectUser={handleSelectSearchedUser}
                   />
                 )}
-                
+
                 {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} />}
                 {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); setActiveTab(AppTab.HOME); }} />}
                 {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} />}
-                
+
                 {/* Khi bấm Tab Profile chính chủ */}
                 {activeTab === AppTab.PROFILE && currentUser && (
                   <ProfileView
                     user={currentUser}
                     isOwnProfile={true}
-                    onBack={() => setActiveTab(AppTab.HOME)} 
-                    userVideos={[]} 
+                    onBack={() => setActiveTab(AppTab.HOME)}
+                    userVideos={[]}
+                    onSubViewChange={setIsProfileSubView}
                   />
                 )}
               </View>
 
-              {!isInChatDetail && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
+              {!isInChatDetail && !isProfileSubView && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
                 <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
               )}
             </>
@@ -258,21 +306,26 @@ const AppContent = () => {
           {/* Lớp này nằm đè lên TẤT CẢ (cả Video Detail lẫn Main Tabs) */}
           {viewingProfile && currentUser && (
             <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: '#fff' }]}>
-               <ProfileView
-                 user={viewingProfile}
-                 isOwnProfile={false}
-                 onBack={() => {
-                   // Khi bấm Back ở Profile:
-                   // Chỉ tắt Profile đi -> Lộ ra lớp bên dưới (Video Detail hoặc Discovery)
-                   setViewingProfile(null); 
-                 }}
-                 userVideos={[]} 
-               />
+              <ProfileView
+                user={viewingProfile}
+                isOwnProfile={false}
+                onBack={() => {
+                  // Khi bấm Back ở Profile:
+                  // Chỉ tắt Profile đi -> Lộ ra lớp bên dưới (Video Detail hoặc Discovery)
+                  setViewingProfile(null);
+                }}
+                userVideos={[]}
+              />
             </View>
           )}
 
         </View>
       )}
+      {/* TIME LIMIT OVERLAY */}
+      <TimeLimitExceededView
+        visible={isTimeLimitReached && !isTimeLimitIgnored}
+        onUnlock={() => setIsTimeLimitIgnored(true)}
+      />
     </View>
   );
 };

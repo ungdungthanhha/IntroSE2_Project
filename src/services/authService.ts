@@ -53,6 +53,7 @@ export const loginUser = async (email: string, password: string) => {
       const newUser: User = {
         uid: user.uid,
         username: (user.displayName || 'user').replace(/\s/g, '').toLowerCase(),
+        role: 'user',
         displayName: user.displayName || 'User', // ADDED
         email: user.email || '',
         birthday: '', // Birthday bị mất do không lưu lúc đăng ký, chấp nhận default
@@ -93,6 +94,7 @@ export const loginWithGoogle = async (): Promise<{ success: boolean; user?: User
       const newUser: User = {
         uid: user.uid || '',
         username: (user.displayName || 'user').replace(/\s/g, '').toLowerCase(),
+        role: 'user',
         displayName: user.displayName || 'User', // ADDED
         email: user.email || '',
         birthday: '', // Không có dữ liệu birthday từ Google
