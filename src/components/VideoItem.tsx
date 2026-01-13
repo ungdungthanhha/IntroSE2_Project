@@ -133,11 +133,13 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           bufferConfig={{
             minBufferMs: 15000,
             maxBufferMs: 30000,
-            bufferForPlaybackMs: 2500,
-            bufferForPlaybackAfterRebufferMs: 5000
+            bufferForPlaybackMs: 1000, // Reduced from 2500 for faster start
+            bufferForPlaybackAfterRebufferMs: 2000 // Reduced from 5000
           }}
           ignoreSilentSwitch={"ignore"}
           poster={posterUrl}
+          posterResizeMode="cover"
+          onLoadStart={() => console.log('Video load start')}
         />
       ) : (
         <Image
