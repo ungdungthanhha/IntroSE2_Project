@@ -20,6 +20,7 @@ import LiveView from './src/components/LiveView';
 import AuthView from './src/components/AuthView';
 import VerifyEmailView from './src/components/VerifyEmailView';
 import DiscoveryView from './src/components/DiscoveryView';
+import SearchView from './src/components/SearchView';
 import TimeLimitExceededView from './src/components/TimeLimitExceededView';
 
 import { AppTab, User, Video as VideoType } from './src/types/type';
@@ -54,6 +55,7 @@ const AppContent = () => {
 
   const ACTUAL_VIDEO_HEIGHT = WINDOW_HEIGHT - insets.top - BOTTOM_NAV_HEIGHT;
   const [setupStatus, setSetupStatus] = useState("Initializing...");
+  const [isSearching, setIsSearching] = useState(false);
 
   // Screen Time State
   const [isTimeLimitReached, setIsTimeLimitReached] = useState(false);
@@ -244,6 +246,22 @@ const AppContent = () => {
                 <ArrowLeft color="#fff" size={30} style={{ shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 2 }} />
               </TouchableOpacity>
             </View>
+          ) : isSearching ? ( 
+            
+            // ---> THÊM ĐOẠN NÀY: Nếu đang search thì hiện SearchView <---
+            <SearchView
+              allVideos={videos}
+              onBack={() => setIsSearching(false)} // Bấm quay lại thì tắt Search
+              onSelectVideo={(video) => {
+                // Chọn video từ search -> Mở video detail
+                handleSelectSearchedVideo(video); 
+                // Có thể giữ isSearching=true để khi back video detail thì về lại search
+                // Hoặc set false nếu muốn về Home. Tùy bạn.
+              }}
+              onSelectUser={handleSelectSearchedUser}
+            />
+            // ------------------------------------------------------------
+
           ) : (
             // --- TRƯỜNG HỢP: GIAO DIỆN CHÍNH (TABS) ---
             <>
@@ -260,7 +278,11 @@ const AppContent = () => {
                           <Text onPress={() => setFeedType('foryou')} style={[styles.headerTab, feedType === 'foryou' && styles.headerTabActive]}>For You</Text>
                         </View>
                       </View>
-                      <View style={styles.headerSide}><Search color="#fff" size={26} /></View>
+                      <View style={styles.headerSide}>
+                        <TouchableOpacity onPress={() => setIsSearching(true)}>
+                           <Search color="#fff" size={26} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
                     {/* Video List */}

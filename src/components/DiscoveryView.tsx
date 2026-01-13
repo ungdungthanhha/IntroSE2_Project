@@ -107,7 +107,7 @@ const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo,
 
             <View style={styles.cardInfo}>
               <Text style={styles.cardCaption} numberOfLines={2}>
-                {item.caption || "No caption"}
+                {item.caption || ""}
               </Text>
               
               <TouchableOpacity 
