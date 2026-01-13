@@ -282,7 +282,7 @@ const AppContent = () => {
 
                 {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} />}
                 {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); setActiveTab(AppTab.HOME); }} />}
-                {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} />}
+                {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} currentUser={currentUser!} />}
 
                 {/* Khi bấm Tab Profile chính chủ */}
                 {activeTab === AppTab.PROFILE && currentUser && (

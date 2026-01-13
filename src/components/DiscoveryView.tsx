@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   FlatList, Dimensions, StatusBar 
 } from 'react-native';
+import { Image } from 'react-native'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, X, ScanLine } from 'lucide-react-native';
 // IMPORT THƯ VIỆN VIDEO CỦA BẠN (VD: react-native-video)
@@ -138,7 +139,7 @@ const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo,
 };
 
 // Cần thêm import Image ở trên cùng nếu chưa có vì mình vừa xoá Image lớn nhưng vẫn dùng Image nhỏ cho avatar
-import { Image } from 'react-native'; 
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },

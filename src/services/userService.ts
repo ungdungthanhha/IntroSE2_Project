@@ -1,6 +1,6 @@
-import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
+import { db, COLLECTIONS, firebaseStorage } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
-import storage from '@react-native-firebase/storage';
+
 
 
 /**
@@ -30,7 +30,7 @@ export const getUserByUsername = async (username: string): Promise<User | null> 
       .where('username', '==', username.toLowerCase())
       .limit(1)
       .get();
-    
+
     if (!snapshot.empty) {
       return snapshot.docs[0].data() as User;
     }
@@ -52,7 +52,7 @@ export const isFollowing = async (currentUserId: string, targetUserId: string): 
       .collection('following')
       .doc(targetUserId)
       .get();
-    
+
     return followDoc.exists();
   } catch (error) {
     console.error('Error checking follow status:', error);
@@ -70,14 +70,14 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     }
 
     const batch = db.batch(); // Sửa lỗi: db.batch() thay vì db().batch()
-    
+
     // 1. Thêm vào danh sách 'following' của người dùng hiện tại
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
       .collection('following')
       .doc(targetUserId);
-    
+
     batch.set(followingRef, {
       userId: targetUserId,
       followedAt: new Date().toISOString()
@@ -89,7 +89,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
       .doc(targetUserId)
       .collection('followers')
       .doc(currentUserId);
-    
+
     batch.set(followersRef, {
       userId: currentUserId,
       followedAt: new Date().toISOString()
@@ -129,7 +129,7 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
 export const unfollowUser = async (currentUserId: string, targetUserId: string): Promise<{ success: boolean; error?: string }> => {
   try {
     const batch = db.batch();
-    
+
     const followingRef = db
       .collection(COLLECTIONS.USERS)
       .doc(currentUserId)
@@ -197,7 +197,7 @@ export const uploadUserAvatar = async (userId: string, imageUri: string): Promis
     // 1. Tạo tên file duy nhất (dựa trên UserID và thời gian)
     // Đường dẫn trên Storage sẽ là: avatars/user_id/avatar_timestamp.jpg
     const filename = `avatars/${userId}/avatar_${Date.now()}.jpg`;
-    const reference = storage().ref(filename);
+    const reference = firebaseStorage.ref(filename);
 
     // 2. Thực hiện upload
     // Lưu ý: putFile nhận đường dẫn file local
@@ -216,7 +216,7 @@ export const uploadUserAvatar = async (userId: string, imageUri: string): Promis
  * Cập nhật thông tin Profile (Username, Bio, Avatar)
  */
 export const updateUserProfile = async (
-  userId: string, 
+  userId: string,
   updates: Partial<Pick<User, 'username' | 'displayName' | 'bio' | 'avatarUrl' | 'instagramHandle' | 'youtubeHandle'>>
 ): Promise<{ success: boolean; error?: string }> => {
   try {

@@ -12,19 +12,19 @@ import {
   StatusBar,
   Animated,
   Easing,
-  Platform
+  Platform,
+  Linking,
+  PermissionsAndroid
 } from 'react-native';
-import { 
-  X, ArrowLeft, Wand2, Image as ImageIcon, 
-  RotateCcw, Zap, Timer, Music 
+import {
+  X, ArrowLeft, Wand2, Image as ImageIcon,
+  RotateCcw, Zap, Timer, Music
 } from 'lucide-react-native';
 import Video from 'react-native-video';
-import { 
-  Camera, 
-  useCameraDevice, 
-  useCameraPermission, 
-  useMicrophonePermission, 
-  VideoFile 
+import {
+  Camera,
+  useCameraDevice,
+  VideoFile
 } from 'react-native-vision-camera';
 import Svg, { Circle } from 'react-native-svg';
 import * as videoService from '../services/videoService';
@@ -41,22 +41,22 @@ interface UploadViewProps {
 const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser }) => {
   // State quản lý Flow
   const [step, setStep] = useState<'camera' | 'details'>('camera');
-  
+
   // State Camera & Permissions
   const device = useCameraDevice('back');
-  const { hasPermission: hasCamPermission, requestPermission: requestCamPermission } = useCameraPermission();
-  const { hasPermission: hasMicPermission, requestPermission: requestMicPermission } = useMicrophonePermission();
+  const [hasCamPermission, setHasCamPermission] = useState(false);
+  const [hasMicPermission, setHasMicPermission] = useState(false);
   const cameraRef = useRef<Camera>(null);
-  
+
   // --- QUAN TRỌNG: Dùng Ref để tránh lỗi Closure khi hết giờ ---
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false); // State này chỉ để render UI
-  
+
   const [cameraPosition, setCameraPosition] = useState<'front' | 'back'>('back');
-  
+
   // State Logic quay
   const [duration, setDuration] = useState<15 | 60>(60);
-  
+
   // State Upload
   const [caption, setCaption] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -70,13 +70,70 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   const radius = (circleSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
+  const requestFullPermissions = async (isInteractive = false) => {
+    // isInteractive = true: Người dùng bấm nút (có thể hiện Alert setting)
+    // isInteractive = false: Chạy lúc mở app (im lặng nếu bị từ chối)
+
+    if (Platform.OS === 'android') {
+      try {
+        // Xin cả 2 quyền cùng lúc
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        ]);
+
+        const camStatus = granted[PermissionsAndroid.PERMISSIONS.CAMERA];
+        const micStatus = granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+
+        // Cập nhật State
+        const isCamGranted = camStatus === PermissionsAndroid.RESULTS.GRANTED;
+        const isMicGranted = micStatus === PermissionsAndroid.RESULTS.GRANTED;
+
+        setHasCamPermission(isCamGranted);
+        setHasMicPermission(isMicGranted);
+
+        // Logic hỏi lại hoặc bắt vào setting
+        if (!isCamGranted || !isMicGranted) {
+          // Nếu người dùng bấm nút Quay mà bị chặn vĩnh viễn
+          if (isInteractive && (
+            camStatus === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ||
+            micStatus === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+          )) {
+            Alert.alert(
+              "Cần cấp quyền",
+              "Bạn đã chặn quyền Camera hoặc Micro. Vui lòng vào Cài đặt để bật lại thủ công.",
+              [
+                { text: "Hủy", style: "cancel" },
+                { text: "Mở Cài đặt", onPress: () => Linking.openSettings() }
+              ]
+            );
+          }
+          return false; // Chưa đủ quyền
+        }
+        return true; // Đủ quyền
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    } else {
+      // Logic cho iOS (Dùng hàm static của Vision Camera)
+      const camStatus = await Camera.requestCameraPermission();
+      const micStatus = await Camera.requestMicrophonePermission();
+
+      const isGranted = camStatus === 'granted' && micStatus === 'granted';
+      setHasCamPermission(camStatus === 'granted');
+      setHasMicPermission(micStatus === 'granted');
+
+      if (!isGranted && isInteractive && (camStatus === 'denied' || micStatus === 'denied')) {
+        Linking.openSettings(); // iOS chỉ có 1 lần hỏi, lần sau phải vào setting
+      }
+      return isGranted;
+    }
+  };
+
   // Xin quyền
   useEffect(() => {
-    const requestPermissions = async () => {
-      await requestCamPermission();
-      await requestMicPermission();
-    };
-    requestPermissions();
+    requestFullPermissions(false); // False: không hiện Alert Setting nếu bị chặn ngay lúc đầu
   }, []);
 
   // Reset animation khi đổi duration
@@ -102,7 +159,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
       console.log("Stopping recording...");
       isRecordingRef.current = false; // Đánh dấu dừng ngay lập tức
       // Dừng animation
-      stopAnimation(); 
+      stopAnimation();
       // Gọi lệnh dừng native
       await cameraRef.current.stopRecording();
       // Lưu ý: setIsRecording(false) và chuyển trang sẽ nằm ở sự kiện onRecordingFinished
@@ -120,17 +177,17 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
       console.log("Starting recording...");
       isRecordingRef.current = true;
       setIsRecording(true);
-      
+
       // Chạy animation đếm giờ
       startAnimation();
-      
+
       cameraRef.current.startRecording({
         onRecordingFinished: (video) => {
           console.log('Video finished:', video);
           // Khi file video đã tạo xong -> Chuyển trang
           setPreviewUrl(video.path);
           setStep('details');
-          
+
           // Reset trạng thái về ban đầu
           setIsRecording(false);
           isRecordingRef.current = false;
@@ -140,7 +197,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
           setIsRecording(false);
           isRecordingRef.current = false;
           if ((error as any).code !== 'session/stopped-unexpectedly') {
-             Alert.alert('Lỗi', 'Không thể lưu video');
+            Alert.alert('Lỗi', 'Không thể lưu video');
           }
         }
       });
@@ -152,7 +209,16 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   };
 
   // 3. Hàm Toggle chính
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
+    // Kiểm tra quyền trước khi quay
+    if (!hasCamPermission || !hasMicPermission) {
+      // Nếu chưa có quyền, gọi hàm xin quyền (Mode Interactive = true)
+      const granted = await requestFullPermissions(true);
+      if (!granted) return; // Nếu vẫn không được thì dừng
+      // Nếu được cấp quyền, người dùng cần bấm lại lần nữa để quay (UX an toàn)
+      return;
+    }
+
     if (isRecordingRef.current) {
       stopRecording();
     } else {
@@ -240,7 +306,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   };
 
   const hasPermission = hasCamPermission && hasMicPermission;
-  if (!hasPermission) return <View style={styles.permissionContainer}><Text style={{color:'#fff'}}>Requesting Permissions...</Text></View>;
+  // if (!hasPermission) return <View style={styles.permissionContainer}><Text style={{color:'#fff'}}>Requesting Permissions...</Text></View>;
 
   // --- RENDER ---
   if (step === 'camera') {
@@ -266,15 +332,15 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
                 <X size={28} color="#fff" />
               </TouchableOpacity>
             ) : (
-              <View style={{width: 44}} /> // Spacer để giữ vị trí
+              <View style={{ width: 44 }} /> // Spacer để giữ vị trí
             )}
-            
+
             <TouchableOpacity style={styles.soundButton}>
               <Music size={14} color="#fff" />
               <Text style={styles.soundText}>Sounds</Text>
             </TouchableOpacity>
-            
-            <View style={{width: 44}} /> 
+
+            <View style={{ width: 44 }} />
           </View>
 
           <View style={styles.bodyContainer}>
@@ -306,13 +372,13 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
                 {duration === 15 && <View style={[styles.activeDot, { right: 0 }]} />}
               </View>
             ) : (
-               <View style={{height: 30, marginBottom: 20}} /> // Spacer
+              <View style={{ height: 30, marginBottom: 20 }} /> // Spacer
             )}
 
             {/* RECORD ROW */}
             <View style={styles.recordRow}>
               {/* Nút Effects (Trái): Ẩn khi quay */}
-              <View style={{width: 60, alignItems: 'center'}}>
+              <View style={{ width: 60, alignItems: 'center' }}>
                 {!isRecording && (
                   <TouchableOpacity style={styles.effectButton}>
                     <View style={styles.effectIconPlaceholder}><Wand2 size={20} color="#000" /></View>
@@ -322,7 +388,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
               </View>
 
               {/* NÚT QUAY (Giữa) */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 activeOpacity={1}
                 onPress={toggleRecording}
                 style={styles.recordButtonWrapper}
@@ -341,7 +407,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
               </TouchableOpacity>
 
               {/* Nút Upload (Phải): Ẩn khi quay */}
-              <View style={{width: 60, alignItems: 'center'}}>
+              <View style={{ width: 60, alignItems: 'center' }}>
                 {!isRecording && (
                   <TouchableOpacity style={styles.uploadButton} onPress={handlePickFromGallery}>
                     <View style={styles.uploadIconPlaceholder}><ImageIcon size={20} color="#fff" /></View>
@@ -359,31 +425,32 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   // --- DETAILS SCREEN (Không thay đổi) ---
   return (
     <View style={styles.detailsContainer}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" />
       <SafeAreaView style={styles.detailsHeader}>
         <TouchableOpacity onPress={() => setStep('camera')} style={styles.iconButton}>
-           <ArrowLeft size={24} color="#000" />
+          <ArrowLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Post</Text>
-        <View style={{width: 24}}/>
+        <View style={{ width: 24 }} />
       </SafeAreaView>
-      <ScrollView contentContainerStyle={{padding: 20}}>
-         <View style={styles.mediaPreviewRow}>
-            <TextInput style={styles.captionInput} placeholder="Describe your video..." multiline value={caption} onChangeText={setCaption} />
-            {previewUrl && (
-               <View style={styles.smallPreview}>
-                 <Video source={{uri: previewUrl}} style={{flex:1}} resizeMode="cover" paused={true} />
-               </View>
-            )}
-         </View>
-         <TouchableOpacity onPress={handleAiCaption} style={styles.aiButton}>
-            <Wand2 size={16} color="#fff" /><Text style={{color: '#fff', fontWeight:'600'}}>AI Caption</Text>
-         </TouchableOpacity>
-         <View style={styles.settingItem}><Text>Who can watch this video</Text><Text style={{color:'#666'}}>Everyone</Text></View>
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <View style={styles.mediaPreviewRow}>
+          <TextInput style={styles.captionInput} placeholder="Describe your video..." multiline value={caption} onChangeText={setCaption} />
+          {previewUrl && (
+            <View style={styles.smallPreview}>
+              <Video source={{ uri: previewUrl }} style={{ flex: 1 }} resizeMode="cover" paused={true} />
+            </View>
+          )}
+        </View>
+        <TouchableOpacity onPress={handleAiCaption} style={styles.aiButton}>
+          <Wand2 size={16} color="#fff" /><Text style={{ color: '#fff', fontWeight: '600' }}>AI Caption</Text>
+        </TouchableOpacity>
+        <View style={styles.settingItem}><Text>Who can watch this video</Text><Text style={{ color: '#666' }}>Everyone</Text></View>
       </ScrollView>
       <View style={styles.detailsFooter}>
-        <TouchableOpacity style={styles.draftBtn} onPress={onClose}><Text style={{fontWeight:'bold'}}>Drafts</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.draftBtn} onPress={onClose}><Text style={{ fontWeight: 'bold' }}>Drafts</Text></TouchableOpacity>
         <TouchableOpacity style={styles.postBtn} onPress={handleSubmit} disabled={isLoading}>
-            {isLoading ? <ActivityIndicator color="#fff"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Post</Text>}
+          {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Post</Text>}
         </TouchableOpacity>
       </View>
     </View>
@@ -430,7 +497,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600'
   },
-  
+
   // Body & Sidebar
   bodyContainer: {
     flex: 1,
@@ -453,7 +520,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: {width: 1, height: 1},
+    textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3
   },
 
@@ -528,7 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1, 
+    borderWidth: 1,
     borderColor: '#fff'
   },
   bottomLabel: {
@@ -565,7 +632,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 6, // Biến thành hình vuông khi quay
-    transform: [{scale: 0.8}]
+    transform: [{ scale: 0.8 }]
   },
 
   // Details Screen Styles

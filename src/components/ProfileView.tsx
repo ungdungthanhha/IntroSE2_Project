@@ -145,9 +145,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleFollowToggle = async () => {
-    if (!currentUserId) return;
+    if (!currentUserId) {
+      console.log('No currentUserId');
+      return;
+    }
     setFollowLoading(true);
     try {
+      console.log(`Attempting to ${isFollowing ? 'unfollow' : 'follow'} user:`, currentUserData.uid);
       if (isFollowing) {
         await userService.unfollowUser(currentUserId, currentUserData.uid);
         setIsFollowing(false);
@@ -157,8 +161,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update follow status');
+    } catch (error: any) {
+      console.error('Follow toggle error:', error);
+      Alert.alert('Error', error.message || 'Failed to update follow status');
     } finally {
       setFollowLoading(false);
     }
