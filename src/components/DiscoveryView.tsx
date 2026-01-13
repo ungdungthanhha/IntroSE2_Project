@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  FlatList, Dimensions, StatusBar 
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  FlatList, Dimensions, StatusBar
 } from 'react-native';
-import { Image } from 'react-native'; 
+import { Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, X, ScanLine } from 'lucide-react-native';
 // IMPORT THƯ VIỆN VIDEO CỦA BẠN (VD: react-native-video)
-import Video from 'react-native-video'; 
+import Video from 'react-native-video';
 import { User, Video as VideoType } from '../types/type';
 
 const { width } = Dimensions.get('window');
@@ -16,7 +16,7 @@ const COL_WIDTH = (width - 24) / 2;
 interface DiscoveryViewProps {
   allVideos: VideoType[];
   onSelectVideo: (video: VideoType) => void;
-  onSelectUser: (user: Partial<User>) => void; 
+  onSelectUser: (user: Partial<User>) => void;
 }
 
 const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo, onSelectUser }) => {
@@ -29,7 +29,7 @@ const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo,
       setFilteredVideos(allVideos);
     } else {
       const lowerQuery = searchText.toLowerCase();
-      const results = allVideos.filter(video => 
+      const results = allVideos.filter(video =>
         (video.caption && video.caption.toLowerCase().includes(lowerQuery)) ||
         (video.ownerName && video.ownerName.toLowerCase().includes(lowerQuery))
       );
@@ -38,7 +38,7 @@ const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo,
   }, [searchText, allVideos]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 10}]}>
+    <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" />
 
       {/* HEADER */}
@@ -73,35 +73,23 @@ const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo,
         contentContainerStyle={{ paddingTop: 10, paddingBottom: 100 }}
         renderItem={({ item }) => (
           <View style={styles.cardItem}>
-            
+
             {/* --- PHẦN SỬA ĐỔI: DÙNG VIDEO LÀM THUMBNAIL --- */}
             <View style={styles.cardImgContainer}>
-      
-              {item.thumbUrl ? (
-                <Image
-                  source={{ uri: item.thumbUrl }}
-                  style={styles.videoThumb}
-                  resizeMode="cover"
-                />
-              ) : (
-                /* Fallback cho video cũ chưa có thumbnail */
-                <Video
-                  source={{ uri: item.videoUrl }}
-                  style={styles.videoThumb}
-                  resizeMode="cover"
-                  paused={true}
-                  muted={true}
-                  controls={false}
-                />
-              )}
+
+              <Image
+                source={{ uri: item.thumbUrl || item.videoUrl?.replace(/\.[^/.]+$/, ".jpg") || `https://picsum.photos/seed/${item.id}/300/450` }}
+                style={styles.videoThumb}
+                resizeMode="cover"
+              />
 
               {/* Lớp 2: Nút bấm phủ đè lên trên cùng (Overlay) */}
-              <TouchableOpacity 
-                style={StyleSheet.absoluteFill} 
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
                 onPress={() => onSelectVideo(item)}
-                activeOpacity={0.7} 
+                activeOpacity={0.7}
               />
-              
+
             </View>
             {/* ----------------------------------------------- */}
 
@@ -109,22 +97,22 @@ const DiscoveryView: React.FC<DiscoveryViewProps> = ({ allVideos, onSelectVideo,
               <Text style={styles.cardCaption} numberOfLines={2}>
                 {item.caption || ""}
               </Text>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.cardUser}
                 onPress={() => {
-                   onSelectUser({
-                     uid: item.ownerUid,
-                     username: item.ownerName,
-                     displayName: item.ownerName,
-                     avatarUrl: item.ownerAvatar
-                   });
+                  onSelectUser({
+                    uid: item.ownerUid,
+                    username: item.ownerName,
+                    displayName: item.ownerName,
+                    avatarUrl: item.ownerAvatar
+                  });
                 }}
               >
                 {/* Avatar nhỏ vẫn dùng Image vì nó nhẹ */}
-                <Image 
-                  source={{ uri: item.ownerAvatar || 'https://via.placeholder.com/50' }} 
-                  style={styles.miniAvatar} 
+                <Image
+                  source={{ uri: item.ownerAvatar || 'https://via.placeholder.com/50' }}
+                  style={styles.miniAvatar}
                 />
                 <Text style={styles.cardUserName} numberOfLines={1}>
                   {item.ownerName || "Unknown User"}
@@ -146,14 +134,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10, borderBottomWidth: 0.5, borderBottomColor: '#eee' },
   searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f1f2', borderRadius: 4, height: 40 },
   input: { flex: 1, fontSize: 16, color: '#000', paddingHorizontal: 10, height: '100%' },
-  
+
   cardItem: { width: COL_WIDTH, marginBottom: 10, backgroundColor: '#fff' },
-  
+
   // Style mới cho container video
-  cardImgContainer: { 
-    width: '100%', 
-    height: COL_WIDTH * 1.5, 
-    borderRadius: 4, 
+  cardImgContainer: {
+    width: '100%',
+    height: COL_WIDTH * 1.5,
+    borderRadius: 4,
     backgroundColor: '#000', // Nền đen trong lúc chờ load
     overflow: 'hidden'       // Để bo góc video
   },

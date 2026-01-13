@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, StatusBar, BackHandler, FlatList } from 'react-native';
 import { Grid3x3 as Grid, ChevronDown, Heart, LogOut, Settings, Umbrella, ArrowLeft, MessageCircle, UserPlus, UserMinus, Share2, MoreHorizontal, Bookmark, Menu } from 'lucide-react-native';
 import { User, Video } from '../types/type';
 import * as authService from '../services/authService';
@@ -222,7 +222,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
       <StatusBar barStyle="dark-content" backgroundColor="transparent" />
 
       <View style={styles.header}>
-        {isOwnProfile ? (
+        {onBack ? (
+          <TouchableOpacity onPress={onBack} style={styles.headerIconLeft}>
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+        ) : isOwnProfile ? (
           <TouchableOpacity style={styles.headerIconLeft}>
             <UserPlus size={24} color="#000" />
           </TouchableOpacity>
@@ -238,7 +242,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         </View>
 
         <View style={styles.headerRight}>
-          {isOwnProfile ? (
+          {isOwnProfile && !onBack ? (
             <>
               <TouchableOpacity onPress={() => setSettingsPath(['digital_wellbeing'])} style={styles.headerIcon}>
                 <Umbrella size={24} color="#000" />
@@ -247,196 +251,207 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                 <Menu size={24} color="#000" />
               </TouchableOpacity>
             </>
-          ) : (
+          ) : !isOwnProfile ? (
             <TouchableOpacity style={styles.headerIcon}>
               <MoreHorizontal size={24} color="#000" />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
-        <View style={styles.profileInfo}>
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: currentUserData.avatarUrl }} style={styles.avatar} />
-          </View>
+      <FlatList
+        data={displayVideos}
+        keyExtractor={(item) => item.id}
+        numColumns={3}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        ListHeaderComponent={
+          <>
+            <View style={styles.profileInfo}>
+              <View style={styles.avatarContainer}>
+                <Image source={{ uri: currentUserData.avatarUrl }} style={styles.avatar} />
+              </View>
 
-          <Text style={styles.handle}>@{currentUserData.username || "jacob_w"}</Text>
+              <Text style={styles.handle}>@{currentUserData.username || "jacob_w"}</Text>
 
-          {/* Stats Section */}
-          <View style={styles.stats}>
-            <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>{currentUserData.followingCount || 14}</Text>
-              <Text style={styles.statLab}>Following</Text>
-            </TouchableOpacity>
-            <View style={styles.divider} />
-            <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>{followerCount || 38}</Text>
-              <Text style={styles.statLab}>Followers</Text>
-            </TouchableOpacity>
-            <View style={styles.divider} />
-            <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statVal}>91</Text>
-              <Text style={styles.statLab}>Likes</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            {isOwnProfile ? (
-              <>
-                <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
-                  <Text style={styles.editBtnText}>Edit profile</Text>
+              {/* Stats Section */}
+              <View style={styles.stats}>
+                <TouchableOpacity style={styles.statItem}>
+                  <Text style={styles.statVal}>{currentUserData.followingCount || 14}</Text>
+                  <Text style={styles.statLab}>Following</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.bookmarkBtn}>
-                  <Bookmark size={20} color="#000" />
+                <View style={styles.divider} />
+                <TouchableOpacity style={styles.statItem}>
+                  <Text style={styles.statVal}>{followerCount || 38}</Text>
+                  <Text style={styles.statLab}>Followers</Text>
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={[styles.followBtn, isFollowing && styles.followingBtn]}
-                  onPress={handleFollowToggle}
-                  disabled={followLoading}
-                >
-                  {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? "#000" : "#fff"} />
-                  ) : (
-                    <>
-                      <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-                        {isFollowing ? 'Following' : 'Follow'}
-                      </Text>
-                    </>
-                  )}
+                <View style={styles.divider} />
+                <TouchableOpacity style={styles.statItem}>
+                  <Text style={styles.statVal}>91</Text>
+                  <Text style={styles.statLab}>Likes</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
-                  <MessageCircle size={20} color="#000" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.moreBtn}>
-                  <ChevronDown size={20} color="#000" />
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+              </View>
 
-          <Text style={styles.bio}>{currentUserData.bio || "Tap to add bio"}</Text>
-        </View>
+              {/* Action Buttons */}
+              <View style={styles.actions}>
+                {isOwnProfile ? (
+                  <>
+                    <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
+                      <Text style={styles.editBtnText}>Edit profile</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.bookmarkBtn}>
+                      <Bookmark size={20} color="#000" />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.followBtn, isFollowing && styles.followingBtn]}
+                      onPress={handleFollowToggle}
+                      disabled={followLoading}
+                    >
+                      {followLoading ? (
+                        <ActivityIndicator size="small" color={isFollowing ? "#000" : "#fff"} />
+                      ) : (
+                        <>
+                          <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+                            {isFollowing ? 'Following' : 'Follow'}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
+                      <MessageCircle size={20} color="#000" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.moreBtn}>
+                      <ChevronDown size={20} color="#000" />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
 
-        {/* Tabs Navigation */}
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
-            onPress={() => setActiveTab('videos')}
-          >
-            <Grid size={24} color={activeTab === 'videos' ? "#000" : "#ccc"} />
-          </TouchableOpacity>
+              <Text style={styles.bio}>{currentUserData.bio || "Tap to add bio"}</Text>
+            </View>
 
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'locked' && styles.tabActive]}
-            onPress={() => setActiveTab('locked')}
-          >
-            <Bookmark size={24} color={activeTab === 'locked' ? "#000" : "#ccc"} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'liked' && styles.tabActive]}
-            onPress={() => setActiveTab('liked')}
-          >
-            <Heart size={24} color={activeTab === 'liked' ? "#000" : "#ccc"} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Grid Videos */}
-        <View style={styles.grid}>
-          {loadingVideos ? (
-            <ActivityIndicator size="large" color="#000" style={{ marginTop: 20, width: '100%' }} />
-          ) : displayVideos.length > 0 ? (
-            displayVideos.map((video) => (
+            {/* Tabs Navigation */}
+            <View style={styles.tabs}>
               <TouchableOpacity
-                key={video.id}
-                style={styles.gridItem}
-                onPress={() => onSelectVideo && onSelectVideo(video)}
-                onLongPress={() => {
-                  if (!currentUserId) return;
-
-                  // CASE 1: DELETE MY VIDEO
-                  if (activeTab === 'videos' && isOwnProfile && currentUserId === video.ownerUid) {
-                    Alert.alert(
-                      "Delete Video",
-                      "Are you sure you want to delete this video?",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Delete", style: "destructive", onPress: async () => {
-                            const res = await videoService.deleteVideo(video.id, currentUserId);
-                            if (res.success) {
-                              Alert.alert("Deleted", "Video has been removed.");
-                              if (props.onDeleteVideo) props.onDeleteVideo(video.id);
-                            } else {
-                              Alert.alert("Error", res.error || "Failed");
-                            }
-                          }
-                        }
-                      ]
-                    );
-                  }
-
-                  // CASE 2: REMOVE FROM LIKED
-                  else if (activeTab === 'liked' && isOwnProfile) {
-                    Alert.alert(
-                      "Remove from Liked",
-                      "Unlike this video?",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Remove", style: "destructive", onPress: async () => {
-                            // isLiked = true -> Pass true to toggle to false
-                            const res = await videoService.toggleLikeVideo(video.id, currentUserId, true);
-                            if (res.success) {
-                              setLikedVideos(prev => prev.filter(v => v.id !== video.id));
-                            } else {
-                              Alert.alert("Error", res.error || "Failed");
-                            }
-                          }
-                        }
-                      ]
-                    );
-                  }
-
-                  // CASE 3: REMOVE FROM SAVED (LOCKED TAB)
-                  else if (activeTab === 'locked' && isOwnProfile) {
-                    Alert.alert(
-                      "Remove from Saved",
-                      "Unsave this video?",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Remove", style: "destructive", onPress: async () => {
-                            // isSaved = true -> Pass true to toggle to false
-                            const res = await videoService.toggleSaveVideo(video.id, currentUserId, true);
-                            if (res.success) {
-                              setSavedVideos(prev => prev.filter(v => v.id !== video.id));
-                            } else {
-                              Alert.alert("Error", res.error || "Failed");
-                            }
-                          }
-                        }
-                      ]
-                    );
-                  }
-                }}
+                style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
+                onPress={() => setActiveTab('videos')}
               >
-                <Image
-                  source={{ uri: getThumbnail(video) }}
-                  style={styles.gridImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.playCountBadge}>
-                  <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
-                </View>
+                <Grid size={24} color={activeTab === 'videos' ? "#000" : "#ccc"} />
               </TouchableOpacity>
-            ))
-          ) : (
+
+              {isOwnProfile && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.tab, activeTab === 'locked' && styles.tabActive]}
+                    onPress={() => setActiveTab('locked')}
+                  >
+                    <Bookmark size={24} color={activeTab === 'locked' ? "#000" : "#ccc"} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.tab, activeTab === 'liked' && styles.tabActive]}
+                    onPress={() => setActiveTab('liked')}
+                  >
+                    <Heart size={24} color={activeTab === 'liked' ? "#000" : "#ccc"} />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+            {loadingVideos && (
+              <ActivityIndicator size="large" color="#000" style={{ marginTop: 20, width: '100%' }} />
+            )}
+          </>
+        }
+        renderItem={({ item: video }) => (
+          <TouchableOpacity
+            key={video.id}
+            style={styles.gridItem}
+            onPress={() => onSelectVideo && onSelectVideo(video)}
+            onLongPress={() => {
+              if (!currentUserId) return;
+
+              // CASE 1: DELETE MY VIDEO
+              if (activeTab === 'videos' && isOwnProfile && currentUserId === video.ownerUid) {
+                Alert.alert(
+                  "Delete Video",
+                  "Are you sure you want to delete this video?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete", style: "destructive", onPress: async () => {
+                        const res = await videoService.deleteVideo(video.id, currentUserId);
+                        if (res.success) {
+                          Alert.alert("Deleted", "Video has been removed.");
+                          if (props.onVideoUpdate) props.onVideoUpdate(video.id, 'delete');
+                        } else {
+                          Alert.alert("Error", res.error || "Failed");
+                        }
+                      }
+                    }
+                  ]
+                );
+              }
+
+              // CASE 2: REMOVE FROM LIKED
+              else if (activeTab === 'liked' && isOwnProfile) {
+                Alert.alert(
+                  "Remove from Liked",
+                  "Unlike this video?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Remove", style: "destructive", onPress: async () => {
+                        // isLiked = true -> Pass true to toggle to false
+                        const res = await videoService.toggleLikeVideo(video.id, currentUserId, true);
+                        if (res.success) {
+                          setLikedVideos(prev => prev.filter(v => v.id !== video.id));
+                        } else {
+                          Alert.alert("Error", res.error || "Failed");
+                        }
+                      }
+                    }
+                  ]
+                );
+              }
+
+              // CASE 3: REMOVE FROM SAVED (LOCKED TAB)
+              else if (activeTab === 'locked' && isOwnProfile) {
+                Alert.alert(
+                  "Remove from Saved",
+                  "Unsave this video?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Remove", style: "destructive", onPress: async () => {
+                        // isSaved = true -> Pass true to toggle to false
+                        const res = await videoService.toggleSaveVideo(video.id, currentUserId, true);
+                        if (res.success) {
+                          setSavedVideos(prev => prev.filter(v => v.id !== video.id));
+                        } else {
+                          Alert.alert("Error", res.error || "Failed");
+                        }
+                      }
+                    }
+                  ]
+                );
+              }
+            }}
+          >
+            <Image
+              source={{ uri: getThumbnail(video) }}
+              style={styles.gridImg}
+              resizeMode="cover"
+            />
+            <View style={styles.playCountBadge}>
+              <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          !loadingVideos ? (
             <View style={styles.noVideos}>
               <Text style={styles.noVideosText}>
                 {activeTab === 'liked' ? "No liked videos" :
@@ -444,9 +459,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                     "No videos yet"}
               </Text>
             </View>
-          )}
-        </View>
-      </ScrollView>
+          ) : null
+        }
+      />
     </View >
   );
 };

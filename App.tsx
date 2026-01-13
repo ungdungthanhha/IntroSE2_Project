@@ -186,18 +186,41 @@ const AppContent = () => {
     if (viewableItems.length > 0) setActiveVideoIndex(viewableItems[0].index || 0);
   }).current;
 
+  // --- ĐIỀU HƯỚNG MỚI (STACK-BASED) ---
+  const [navStack, setNavStack] = useState<string[]>(['home']);
+  const currentScreen = navStack[navStack.length - 1] || 'home';
+
+  const pushScreen = (screen: string) => {
+    setNavStack(prev => [...prev, screen]);
+  };
+
+  const popScreen = () => {
+    setNavStack(prev => {
+      if (prev.length <= 1) return prev;
+      return prev.slice(0, -1);
+    });
+  };
+
+  const getZIndex = (screenName: string) => {
+    const idx = navStack.lastIndexOf(screenName);
+    return idx === -1 ? -1 : idx + 1000;
+  };
+
   // --- HANDLERS ĐIỀU HƯỚNG ---
 
   const handleSelectSearchedVideo = (video: VideoType) => {
     setSelectedVideo(video); // Mở Video Detail
+    pushScreen('video');
   };
 
   const handleSelectSearchedUser = (user: any) => {
     setViewingProfile(user as User); // Mở Profile
+    pushScreen('profile');
   };
 
   const handleBackFromDetail = () => {
-    setSelectedVideo(null); // Đóng Video Detail -> Về Discovery
+    setSelectedVideo(null); // Đóng Video Detail
+    popScreen();
   };
 
   // --- RENDER ---
@@ -226,45 +249,20 @@ const AppContent = () => {
         <View style={{ flex: 1, backgroundColor: '#000' }}>
 
           {/* LAYER 1: CONTENT (HOME / DISCOVERY / VIDEO DETAIL) */}
-          {selectedVideo ? (
-            // --- TRƯỜNG HỢP: ĐANG XEM VIDEO CHI TIẾT ---
-            <View style={{ flex: 1, backgroundColor: '#000' }}>
-              <StatusBar barStyle="light-content" />
-              <VideoItem
-                video={selectedVideo}
-                shouldLoad={true}
-                isActive={true}
-                itemHeight={WINDOW_HEIGHT}
-                // Khi bấm avatar trong video -> Set viewingProfile -> Profile sẽ hiện đè lên (Layer 2)
-                onViewProfile={setViewingProfile}
-                currentUserId={currentUser?.uid} // Pass currentUserId
+          {isSearching ? (
+            <View style={{ flex: 1, zIndex: getZIndex('search') }}>
+              <SearchView
+                allVideos={videos}
+                onBack={() => {
+                  setIsSearching(false);
+                  popScreen();
+                }}
+                onSelectVideo={handleSelectSearchedVideo}
+                onSelectUser={handleSelectSearchedUser}
               />
-              <TouchableOpacity
-                style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 999, padding: 8 }}
-                onPress={handleBackFromDetail}
-              >
-                <ArrowLeft color="#fff" size={30} style={{ shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 2 }} />
-              </TouchableOpacity>
             </View>
-          ) : isSearching ? ( 
-            
-            // ---> THÊM ĐOẠN NÀY: Nếu đang search thì hiện SearchView <---
-            <SearchView
-              allVideos={videos}
-              onBack={() => setIsSearching(false)} // Bấm quay lại thì tắt Search
-              onSelectVideo={(video) => {
-                // Chọn video từ search -> Mở video detail
-                handleSelectSearchedVideo(video); 
-                // Có thể giữ isSearching=true để khi back video detail thì về lại search
-                // Hoặc set false nếu muốn về Home. Tùy bạn.
-              }}
-              onSelectUser={handleSelectSearchedUser}
-            />
-            // ------------------------------------------------------------
-
           ) : (
-            // --- TRƯỜNG HỢP: GIAO DIỆN CHÍNH (TABS) ---
-            <>
+            <View style={{ flex: 1, zIndex: getZIndex('home') }}>
               <View style={styles.content}>
                 {activeTab === AppTab.HOME && (
                   <View style={styles.homeContainer}>
@@ -279,8 +277,11 @@ const AppContent = () => {
                         </View>
                       </View>
                       <View style={styles.headerSide}>
-                        <TouchableOpacity onPress={() => setIsSearching(true)}>
-                           <Search color="#fff" size={26} />
+                        <TouchableOpacity onPress={() => {
+                          setIsSearching(true);
+                          pushScreen('search');
+                        }}>
+                          <Search color="#fff" size={26} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -294,10 +295,13 @@ const AppContent = () => {
                           renderItem={({ item, index }) => (
                             <VideoItem
                               video={item}
-                              isActive={activeVideoIndex === index}
+                              isActive={activeVideoIndex === index && currentScreen === 'home'}
                               shouldLoad={Math.abs(activeVideoIndex - index) <= 1}
                               itemHeight={ACTUAL_VIDEO_HEIGHT}
-                              onViewProfile={setViewingProfile}
+                              onViewProfile={(user) => {
+                                setViewingProfile(user);
+                                pushScreen('profile');
+                              }}
                               currentUserId={currentUser?.uid} // Pass currentUserId
                             />
                           )}
@@ -335,7 +339,7 @@ const AppContent = () => {
                     user={currentUser}
                     isOwnProfile={true}
                     currentUserId={currentUser.uid} // Added currentUserId
-                    onBack={() => setActiveTab(AppTab.HOME)}
+                    // Removed onBack to keep navbar (settings/wellbeing) and show UserPlus icon
                     userVideos={myVideos}
                     onSubViewChange={setIsProfileSubView}
                     onUserUpdate={(updatedUser) => {
@@ -354,7 +358,7 @@ const AppContent = () => {
                           : v
                       ));
                     }}
-                    onSelectVideo={setSelectedVideo} // Enable video playback
+                    onSelectVideo={handleSelectSearchedVideo}
                     onVideoUpdate={(videoId, action) => {
                       if (action === 'delete') {
                         setMyVideos(prev => prev.filter(v => v.id !== videoId));
@@ -374,28 +378,49 @@ const AppContent = () => {
                 )}
               </View>
 
-              {!isInChatDetail && !isProfileSubView && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
+              {currentScreen === 'home' && !isInChatDetail && !isProfileSubView && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
                 <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
               )}
-            </>
+            </View>
           )}
 
-          {/* LAYER 2: PROFILE OVERLAY (QUAN TRỌNG NHẤT) */}
-          {/* Lớp này nằm đè lên TẤT CẢ (cả Video Detail lẫn Main Tabs) */}
+          {/* LAYER 2: PROFILE OVERLAY */}
           {viewingProfile && currentUser && (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: '#fff' }]}>
+            <View style={[StyleSheet.absoluteFill, { zIndex: getZIndex('profile'), backgroundColor: '#fff' }]}>
               <ProfileView
                 user={viewingProfile}
-                isOwnProfile={false}
+                isOwnProfile={viewingProfile.uid === currentUser.uid}
                 currentUserId={currentUser.uid} // Added currentUserId
                 onBack={() => {
-                  // Khi bấm Back ở Profile:
-                  // Chỉ tắt Profile đi -> Lộ ra lớp bên dưới (Video Detail hoặc Discovery)
                   setViewingProfile(null);
+                  popScreen();
                 }}
                 userVideos={otherVideos}
-                onSelectVideo={setSelectedVideo} // Enable video playback
+                onSelectVideo={handleSelectSearchedVideo}
               />
+            </View>
+          )}
+
+          {/* LAYER 3: VIDEO DETAIL OVERLAY */}
+          {selectedVideo && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: getZIndex('video'), backgroundColor: '#000' }]}>
+              <VideoItem
+                video={selectedVideo}
+                shouldLoad={true}
+                isActive={currentScreen === 'video'}
+                itemHeight={WINDOW_HEIGHT}
+                onViewProfile={(user) => {
+                  setViewingProfile(user);
+                  pushScreen('profile');
+                }}
+                currentUserId={currentUser?.uid}
+              />
+              <TouchableOpacity
+                style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 9991, padding: 8 }}
+                onPress={handleBackFromDetail}
+              >
+                <ArrowLeft color="#fff" size={30} style={{ shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 2 }} />
+              </TouchableOpacity>
             </View>
           )}
 
