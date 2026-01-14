@@ -1,20 +1,24 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
-import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, ChevronDown, Camera, Send } from 'lucide-react-native';
+import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, Send, Bell } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chat, Message, User } from '../types/type';
 import * as chatService from '../services/chatService';
 import * as userService from '../services/userService';
+import ActivityView from './ActivityView';
 
 interface ChatViewProps {
   onChatDetailChange?: (isInDetail: boolean) => void;
   currentUser: User;
 }
 
+type InboxTab = 'activity' | 'messages';
+
 const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) => {
   const insets = useSafeAreaInsets();
 
+  const [activeTab, setActiveTab] = useState<InboxTab>('messages');
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -23,9 +27,10 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
   const [loadingChats, setLoadingChats] = useState(true);
 
   // Notify parent when entering/leaving chat detail
+  // Hide bottom nav only when: in chat conversation OR in activity page
   useEffect(() => {
-    onChatDetailChange?.(selectedChat !== null);
-  }, [selectedChat, onChatDetailChange]);
+    onChatDetailChange?.(selectedChat !== null || activeTab === 'activity');
+  }, [selectedChat, activeTab, onChatDetailChange]);
 
   // Subscribe chats
   useEffect(() => {
@@ -40,6 +45,7 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
 
   // Attach otherUser info if missing
   useEffect(() => {
+    if (!chats || chats.length === 0) return;
     const missing = chats.filter((c) => !c.otherUser || !c.otherUser.username);
     if (!missing.length) return;
 
@@ -81,6 +87,10 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
     setSelectedChat(chat);
   };
 
+  const goBackToMessages = () => {
+    setSelectedChat(null);
+  };
+
   if (!currentUser?.uid) {
     return (
       <View style={styles.centered}>
@@ -90,36 +100,47 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
     );
   }
 
+  // Activity View
+  if (activeTab === 'activity') {
+    return <ActivityView onBack={() => setActiveTab('messages')} />;
+  }
+
+  // Chat Conversation View
   if (selectedChat) {
     return (
-      <View style={[styles.detailContainer, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="dark-content" backgroundColor="transparent" />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setSelectedChat(null)} style={styles.headerBtn}>
+        {/* Header */}
+        <View style={styles.chatHeader}>
+          <TouchableOpacity onPress={goBackToMessages} style={styles.headerBtn}>
             <ArrowLeft color="#000" size={24} />
           </TouchableOpacity>
-          <View style={styles.headerTitle}>
-            <Image source={{ uri: selectedChat.otherUser.avatarUrl }} style={styles.headerAvatar} />
+          <View style={styles.chatHeaderInfo}>
+            <Image source={{ uri: selectedChat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.chatHeaderAvatar} />
             <View>
-              <Text style={styles.headerUser}>{selectedChat.otherUser.username}</Text>
-              <Text style={styles.headerStatus}>Active 11m ago</Text>
+              <Text style={styles.chatHeaderName}>{selectedChat.otherUser?.username || 'User'}</Text>
+              <Text style={styles.chatHeaderStatus}>Active 11m ago</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.headerBtn}>
             <Flag color="#000" size={20} />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.messagesList} showsVerticalScrollIndicator={false}>
+
+        {/* Messages List */}
+        <ScrollView style={styles.messagesList} showsVerticalScrollIndicator={false} contentContainerStyle={styles.messagesContent}>
           {loadingMessages ? (
-            <ActivityIndicator size="small" color="#fe2c55" />
+            <ActivityIndicator size="small" color="#00d4ff" style={{ marginTop: 20 }} />
           ) : (
-            messages.map((m) => {
+            messages.map((m, index) => {
               const isMe = m.senderId === currentUser.uid;
               return (
-                <View key={m.id} style={[styles.msgWrapper, isMe ? styles.msgMe : styles.msgOther]}>
-                  {!isMe && <Image source={{ uri: selectedChat.otherUser.avatarUrl }} style={styles.msgAvatar} />}
-                  <View style={isMe ? styles.msgBubbleMe : styles.msgBubbleOther}>
-                    <Text style={isMe ? styles.msgTextMe : styles.msgTextOther}>{m.text}</Text>
+                <View key={m.id || index}>
+                  <View style={[styles.msgWrapper, isMe ? styles.msgMe : styles.msgOther]}>
+                    {!isMe && <Image source={{ uri: selectedChat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.msgAvatar} />}
+                    <View style={isMe ? styles.msgBubbleMe : styles.msgBubbleOther}>
+                      <Text style={isMe ? styles.msgTextMe : styles.msgTextOther}>{m.text}</Text>
+                    </View>
                   </View>
                 </View>
               );
@@ -127,8 +148,9 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
           )}
         </ScrollView>
 
+        {/* Input Bar */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.inputBar}>
+          <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
             <View style={styles.inputInner}>
               <TextInput
                 placeholder="Message..."
@@ -140,8 +162,14 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
                 returnKeyType="send"
               />
               <View style={styles.inputIcons}>
-                <TouchableOpacity onPress={handleSend}>
-                  <Send size={20} color={input ? '#fe2c55' : '#888'} />
+                <TouchableOpacity style={styles.inputIconBtn}>
+                  <Mic size={22} color="#888" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.inputIconBtn}>
+                  <Smile size={22} color="#888" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.inputIconBtn}>
+                  <ImageIcon size={22} color="#888" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -151,109 +179,256 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
     );
   }
 
+  // Direct Messages View (Main)
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" />
-      <View style={styles.listHeader}>
-        <View style={{ width: 40 }} />
-        <TouchableOpacity style={styles.titleWrapper}>
-          <Text style={styles.listTitle}>Direct messages</Text>
-          <ChevronDown size={14} color="#000" strokeWidth={3} />
+      {/* Header */}
+      <View style={styles.messagesHeader}>
+        <TouchableOpacity onPress={() => setActiveTab('activity')} style={styles.headerBtn}>
+          <Bell color="#000" size={22} />
         </TouchableOpacity>
+        <Text style={styles.messagesTitle}>Direct messages</Text>
         <TouchableOpacity style={styles.headerBtn}>
-          <Plus size={24} color="#000" />
+          <Plus color="#000" size={24} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.chatsList}>
-        <View style={styles.activityRow}>
-          <TouchableOpacity style={styles.actItem}>
-            <View style={styles.actPlus}><Plus color="#888" size={20} /></View>
-            <Text style={styles.actName}>Create</Text>
-          </TouchableOpacity>
-          {chats.map((c) => (
-            <View key={c.id} style={styles.actItem}>
-              <Image source={{ uri: c.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.actAvatar} />
-              <Text style={styles.actName}>{c.otherUser?.username || 'User'}</Text>
-            </View>
-          ))}
+      {/* Content */}
+      {loadingChats ? (
+        <View style={styles.emptyStateContainer}>
+          <ActivityIndicator size="large" color="#00d4ff" />
         </View>
-
-        <Text style={styles.sectionTitle}>Messages</Text>
-        {loadingChats && <ActivityIndicator size="small" color="#fe2c55" style={{ marginVertical: 10 }} />}
-        {!loadingChats && chats.length === 0 && (
-          <Text style={{ paddingHorizontal: 15, color: '#888' }}>No messages yet</Text>
-        )}
-        {chats.map((chat) => (
-          <TouchableOpacity
-            key={chat.id}
-            style={styles.chatRow}
-            onPress={() => selectChat(chat)}
-          >
-            <Image source={{ uri: chat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.rowAvatar} />
-            <View style={styles.rowInfo}>
-              <View style={styles.rowTop}>
+      ) : chats.length === 0 ? (
+        // Empty State
+        <View style={styles.emptyStateContainer}>
+          <View style={styles.emptyIconContainer}>
+            <Send size={60} color="#ccc" strokeWidth={1} />
+          </View>
+          <Text style={styles.emptyTitle}>Message your friends</Text>
+          <Text style={styles.emptySubtitle}>Share videos or start a conversation</Text>
+        </View>
+      ) : (
+        // Chat List
+        <ScrollView style={styles.chatsList}>
+          {chats.map((chat) => (
+            <TouchableOpacity
+              key={chat.id}
+              style={styles.chatRow}
+              onPress={() => selectChat(chat)}
+            >
+              <Image source={{ uri: chat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.rowAvatar} />
+              <View style={styles.rowInfo}>
                 <Text style={styles.rowUser}>{chat.otherUser?.username || 'User'}</Text>
-                <Text style={styles.rowTime}></Text>
+                <Text style={styles.rowMsg} numberOfLines={1}>{chat.lastMessage || 'Tap to start chatting'}</Text>
               </View>
-              <Text style={styles.rowMsg} numberOfLines={1}>{chat.lastMessage || ''}</Text>
-            </View>
-            <Camera size={20} color="#ddd" />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  detailContainer: { flex: 1, backgroundColor: '#fff' },
-  header: {
+  container: {
+    flex: 1,
+    backgroundColor: '#fff'
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff'
+  },
+
+  // Messages Header
+  messagesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  messagesTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000',
+  },
+
+  // Chat Header
+  chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#f9f9f9'
+    borderBottomColor: '#f0f0f0',
   },
-  headerBtn: { padding: 4 },
-  headerTitle: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
-  headerUser: { fontWeight: '700', fontSize: 15, color: '#000' },
-  headerStatus: { fontSize: 11, color: '#888' },
-  messagesList: { flex: 1, padding: 15 },
-  dateSeparator: { textAlign: 'center', fontSize: 11, color: '#bbb', marginVertical: 20, fontWeight: '700' },
-  msgWrapper: { marginBottom: 15, flexDirection: 'row' },
-  msgMe: { justifyContent: 'flex-end' },
-  msgOther: { justifyContent: 'flex-start' },
-  msgAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 8, alignSelf: 'flex-end' },
-  msgBubbleMe: { backgroundColor: '#00a8e1', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20, borderBottomRightRadius: 2, maxWidth: '80%' },
-  msgBubbleOther: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#eee', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20, borderBottomLeftRadius: 2, maxWidth: '80%' },
-  msgTextMe: { color: '#fff', fontSize: 15 },
-  msgTextOther: { color: '#000', fontSize: 15 },
-  inputBar: { padding: 10, borderTopWidth: 1, borderTopColor: '#eee', paddingBottom: 30 },
-  inputInner: { backgroundColor: '#f1f1f2', borderRadius: 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
-  textInput: { flex: 1, paddingVertical: 10, fontSize: 15, color: '#000' },
-  inputIcons: { flexDirection: 'row', marginLeft: 10, gap: 10 },
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  titleWrapper: { flexDirection: 'row', alignItems: 'center' },
-  listTitle: { fontSize: 17, fontWeight: '700', marginRight: 4, color: '#000' },
-  chatsList: { flex: 1 },
-  activityRow: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-  actItem: { alignItems: 'center', marginRight: 20 },
-  actPlus: { width: 60, height: 60, borderRadius: 30, borderStyle: 'dashed', borderWidth: 2, borderColor: '#eee', alignItems: 'center', justifyContent: 'center' },
-  actAvatar: { width: 60, height: 60, borderRadius: 30 },
-  actName: { fontSize: 11, marginTop: 6, color: '#555' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#aaa', textTransform: 'uppercase', paddingHorizontal: 15, marginTop: 20, marginBottom: 10 },
-  chatRow: { flexDirection: 'row', alignItems: 'center', padding: 15 },
-  rowAvatar: { width: 56, height: 56, borderRadius: 28 },
-  rowInfo: { flex: 1, marginLeft: 12 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  rowUser: { fontWeight: '700', fontSize: 15, color: '#000' },
-  rowTime: { fontSize: 12, color: '#aaa' },
-  rowMsg: { color: '#888', fontSize: 14 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' }
+  chatHeaderInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  chatHeaderAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  chatHeaderName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  chatHeaderStatus: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 1,
+  },
+
+  headerBtn: {
+    padding: 8,
+  },
+
+  // Empty State
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyIconContainer: {
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // Chat List
+  chatsList: {
+    flex: 1,
+  },
+  chatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  rowAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  rowInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  rowUser: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+  },
+  rowMsg: {
+    fontSize: 14,
+    color: '#888',
+  },
+
+  // Messages
+  messagesList: {
+    flex: 1,
+  },
+  messagesContent: {
+    padding: 16,
+    paddingBottom: 20,
+  },
+  msgWrapper: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  msgMe: {
+    justifyContent: 'flex-end',
+  },
+  msgOther: {
+    justifyContent: 'flex-start',
+  },
+  msgAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+  },
+  msgBubbleMe: {
+    backgroundColor: '#00d4ff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderBottomRightRadius: 4,
+    maxWidth: '75%',
+  },
+  msgBubbleOther: {
+    backgroundColor: '#f1f1f2',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderBottomLeftRadius: 4,
+    maxWidth: '75%',
+  },
+  msgTextMe: {
+    color: '#fff',
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  msgTextOther: {
+    color: '#000',
+    fontSize: 15,
+    lineHeight: 20,
+  },
+
+  // Input Bar
+  inputBar: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    backgroundColor: '#fff',
+  },
+  inputInner: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#000',
+    paddingVertical: 4,
+  },
+  inputIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  inputIconBtn: {
+    padding: 4,
+    marginLeft: 8,
+  },
 });
 
 export default ChatView;
