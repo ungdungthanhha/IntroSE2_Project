@@ -11,7 +11,7 @@ import { generateCaption } from '../services/geminiService'; // Giữ nguyên im
 interface DetailsScreenProps {
   videoPath: string;
   onBack: () => void;
-  onSubmit: (caption: string, setIsLoading: (l: boolean) => void) => void;
+  onSubmit: (caption: string, setIsLoading: (l: boolean) => void) => Promise<void> | void;
   onSaveDraft: () => void;
 }
 
@@ -74,8 +74,13 @@ const DetailsScreen: React.FC<DetailsScreenProps> = ({ videoPath, onBack, onSubm
           <Text style={{ fontWeight: '600' }}>Drafts</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.postBtn}
-          onPress={() => onSubmit(caption, setIsLoading)}
+          style={[styles.postBtn, isLoading && styles.postBtnDisabled]}
+          onPress={() => {
+            if (isLoading) return; // fast guard to block rapid taps before state update
+            setIsLoading(true); // immediately disable button locally
+            // call submit (UploadView will still control final state via setIsLoading)
+            void onSubmit(caption, setIsLoading);
+          }}
           disabled={isLoading}
         >
           {isLoading ? (
@@ -109,6 +114,7 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', padding: 16, gap: 10, borderTopWidth: 1, borderTopColor: '#eee', paddingBottom: 50 },
   draftBtn: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#eee', borderRadius: 4 },
   postBtn: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#EE1D52', borderRadius: 4 },
+  postBtnDisabled: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#cfcfcf', borderRadius: 4 },
 });
 
 export default DetailsScreen;
