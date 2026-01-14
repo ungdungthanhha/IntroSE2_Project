@@ -43,7 +43,6 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
     { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
   ]);
-
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -133,8 +132,8 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           bufferConfig={{
             minBufferMs: 15000,
             maxBufferMs: 30000,
-            bufferForPlaybackMs: 1000, // Reduced from 2500 for faster start
-            bufferForPlaybackAfterRebufferMs: 2000 // Reduced from 5000
+            bufferForPlaybackMs: 1000,
+            bufferForPlaybackAfterRebufferMs: 2000
           }}
           ignoreSilentSwitch={"ignore"}
           poster={posterUrl}
@@ -214,7 +213,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </Text>
           <View style={styles.musicRow}>
             <Music size={14} color="#fff" />
-            <Text style={styles.musicText}>Nhạc nền - {video.ownerName}</Text>
+            <Text style={styles.musicText}>{video.ownerName}</Text>
           </View>
         </View>
 

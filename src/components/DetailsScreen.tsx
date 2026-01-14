@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, 
-  SafeAreaView, ActivityIndicator, StatusBar, 
-  Platform
+import {
+  View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
+  SafeAreaView, ActivityIndicator, StatusBar,
+  Platform, Alert
 } from 'react-native';
 import { ArrowLeft, Wand2 } from 'lucide-react-native';
 import Video from 'react-native-video';
@@ -21,15 +21,24 @@ const DetailsScreen: React.FC<DetailsScreenProps> = ({ videoPath, onBack, onSubm
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleAiCaption = async () => {
+    if (!caption.trim()) {
+      Alert.alert("Input Required", "Please enter a few keywords or a rough description first!");
+      return;
+    }
     setIsGenerating(true);
-    try { setCaption(await generateCaption("video")); } catch (e) {}
+    try {
+      const newCaption = await generateCaption(caption);
+      setCaption(newCaption);
+    } catch (e) {
+      Alert.alert("Error", "Failed to generate caption.");
+    }
     setIsGenerating(false);
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
+
       <SafeAreaView style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.iconButton}>
           <ArrowLeft size={24} color="#000" />
@@ -40,12 +49,12 @@ const DetailsScreen: React.FC<DetailsScreenProps> = ({ videoPath, onBack, onSubm
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <View style={styles.mediaPreviewRow}>
-          <TextInput 
-            style={styles.captionInput} 
-            placeholder="Describe your video..." 
-            multiline 
-            value={caption} 
-            onChangeText={setCaption} 
+          <TextInput
+            style={styles.captionInput}
+            placeholder="Describe your video..."
+            multiline
+            value={caption}
+            onChangeText={setCaption}
           />
           <View style={styles.smallPreview}>
             <Video source={{ uri: videoPath }} style={{ flex: 1 }} resizeMode="cover" paused={true} />
@@ -53,10 +62,10 @@ const DetailsScreen: React.FC<DetailsScreenProps> = ({ videoPath, onBack, onSubm
         </View>
 
         <TouchableOpacity onPress={handleAiCaption} style={styles.aiButton} disabled={isGenerating}>
-           <Wand2 size={16} color="#fff" />
-           <Text style={{ color: '#fff', fontWeight: '600' }}>
-             {isGenerating ? 'Generating...' : 'AI Caption'}
-           </Text>
+          <Wand2 size={16} color="#fff" />
+          <Text style={{ color: '#fff', fontWeight: '600' }}>
+            {isGenerating ? 'Generating...' : 'AI Caption'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -64,9 +73,9 @@ const DetailsScreen: React.FC<DetailsScreenProps> = ({ videoPath, onBack, onSubm
         <TouchableOpacity style={styles.draftBtn} onPress={onSaveDraft}>
           <Text style={{ fontWeight: '600' }}>Drafts</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.postBtn} 
-          onPress={() => onSubmit(caption, setIsLoading)} 
+        <TouchableOpacity
+          style={styles.postBtn}
+          onPress={() => onSubmit(caption, setIsLoading)}
           disabled={isLoading}
         >
           {isLoading ? (
@@ -82,14 +91,15 @@ const DetailsScreen: React.FC<DetailsScreenProps> = ({ videoPath, onBack, onSubm
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { 
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', 
-    padding: 10, 
-    borderBottomWidth: 1, 
+    justifyContent: 'space-between',
+    padding: 10,
+    borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    paddingTop: 40 },
+    paddingTop: 40
+  },
   iconButton: { padding: 8 },
   headerTitle: { fontSize: 16, fontWeight: '700' },
   mediaPreviewRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },

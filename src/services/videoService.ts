@@ -1,6 +1,7 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
 import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '@env';
 import { launchImageLibrary, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
 
@@ -8,8 +9,8 @@ import { PermissionsAndroid, Platform, Alert } from 'react-native';
  * 1. Tải Video lên Cloudinary (Sử dụng Unsigned Upload)
  */
 export const uploadVideoToCloudinary = async (fileUri: string) => {
-  const cloudName = 'dvmfpcxz8';
-  const uploadPreset = 'tictoc_uploads';
+  const cloudName = CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = CLOUDINARY_UPLOAD_PRESET;
 
   const formData = new FormData();
   formData.append('file', {
@@ -19,34 +20,47 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
   } as any);
   formData.append('upload_preset', uploadPreset);
 
-  try {
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
-      {
-        method: 'POST',
-        body: formData,
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }
-    );
-    const data = await response.json();
-    // DEBUG DATA UPLOAD
-    if (data) {
-      console.log('Cloudinary Upload Success:', data);
+  return new Promise<{ videoUrl: string; thumbUrl: string } | null>((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`);
 
-      // --- LOGIC TẠO THUMBNAIL TỰ ĐỘNG ---
-      const videoUrl = data.secure_url;
-
-      // Cloudinary cho phép lấy ảnh bìa bằng cách đổi đuôi file thành .jpg
-      // Ví dụ: .../upload/v123/abc.mp4  ->  .../upload/v123/abc.jpg
-      const thumbUrl = videoUrl.replace(/\.[^/.]+$/, ".jpg");
-
-      return { videoUrl, thumbUrl };
+    // --- PROGRESS LOGGING ---
+    if (xhr.upload) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          console.log(`> Uploading to Cloudinary: ${percent}%`);
+        }
+      };
     }
-    return null;
-  } catch (error) {
-    console.error('Cloudinary Upload Error:', error);
-    return null;
-  }
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        try {
+          const data = JSON.parse(xhr.response);
+          console.log('Cloudinary Upload Success:', data);
+
+          const videoUrl = data.secure_url;
+          const thumbUrl = videoUrl.replace(/\.[^/.]+$/, ".jpg");
+
+          resolve({ videoUrl, thumbUrl });
+        } catch (e) {
+          console.error('JSON Parse Error:', e);
+          resolve(null);
+        }
+      } else {
+        console.error('Cloudinary Upload Failed:', xhr.response);
+        resolve(null);
+      }
+    };
+
+    xhr.onerror = () => {
+      console.error('XHR Network Error');
+      resolve(null);
+    };
+
+    xhr.send(formData);
+  });
 };
 
 /**
@@ -62,7 +76,7 @@ export const saveVideoMetadata = async (videoData: Partial<Video>) => {
       likesCount: 0,
       commentsCount: 0,
       savesCount: 0, // Khởi tạo giá trị lưu
-      timestamp: Date.now(), // Lưu dạng số để dễ sắp xếp
+      createdAt: videoData.createdAt || Date.now(),
     };
 
     await newVideoRef.set(finalData);
@@ -82,10 +96,23 @@ export const getAllVideos = async (): Promise<Video[]> => {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Video)); //
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      // Normalize createdAt to timestamp number if it's a string
+      const createdAt = typeof data.createdAt === 'string'
+        ? new Date(data.createdAt).getTime()
+        : data.createdAt;
+
+      return {
+        id: doc.id,
+        ...data,
+        createdAt
+      } as Video;
+    }).sort((a, b) => {
+      const timeDiff = b.createdAt - a.createdAt;
+      if (timeDiff !== 0) return timeDiff;
+      return (a.ownerUid || '').localeCompare(b.ownerUid || '');
+    });
   } catch (error) {
     console.error('Error getting videos:', error);
     return [];
@@ -103,10 +130,22 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Video)); //
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const createdAt = typeof data.createdAt === 'string'
+        ? new Date(data.createdAt).getTime()
+        : data.createdAt;
+
+      return {
+        id: doc.id,
+        ...data,
+        createdAt
+      } as Video;
+    }).sort((a, b) => {
+      const timeDiff = b.createdAt - a.createdAt;
+      if (timeDiff !== 0) return timeDiff;
+      return (a.ownerUid || '').localeCompare(b.ownerUid || '');
+    });
   } catch (error) {
     console.error('Error getting user videos:', error);
     return [];
@@ -238,7 +277,18 @@ export const getLikedVideos = async (userId: string): Promise<Video[]> => {
 
     return videoDocs
       .filter(doc => doc.exists)
-      .map(doc => ({ id: doc.id, ...doc.data() } as Video));
+      .map(doc => {
+        const data = doc.data()!;
+        const createdAt = typeof data.createdAt === 'string'
+          ? new Date(data.createdAt).getTime()
+          : data.createdAt;
+        return { id: doc.id, ...data, createdAt } as Video;
+      })
+      .sort((a, b) => {
+        const timeDiff = b.createdAt - a.createdAt;
+        if (timeDiff !== 0) return timeDiff;
+        return (a.ownerUid || '').localeCompare(b.ownerUid || '');
+      });
 
   } catch (error) {
     console.error('Error getting liked videos:', error);
@@ -262,7 +312,18 @@ export const getSavedVideos = async (userId: string): Promise<Video[]> => {
 
     return videoDocs
       .filter(doc => doc.exists)
-      .map(doc => ({ id: doc.id, ...doc.data() } as Video));
+      .map(doc => {
+        const data = doc.data()!;
+        const createdAt = typeof data.createdAt === 'string'
+          ? new Date(data.createdAt).getTime()
+          : data.createdAt;
+        return { id: doc.id, ...data, createdAt } as Video;
+      })
+      .sort((a, b) => {
+        const timeDiff = b.createdAt - a.createdAt;
+        if (timeDiff !== 0) return timeDiff;
+        return (a.ownerUid || '').localeCompare(b.ownerUid || '');
+      });
 
   } catch (error) {
     console.error('Error getting saved videos:', error);

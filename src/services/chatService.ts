@@ -9,7 +9,7 @@ export const getOrCreateChat = async (currentUser: User, targetUser: User): Prom
   const chatRef = db.collection(COLLECTIONS.CHATS).doc(chatId);
 
   const snap = await chatRef.get();
-  if (snap.exists) {
+  if (snap.exists()) {
     return snap.data() as Chat;
   }
 

@@ -47,7 +47,7 @@ export const startLivestream = async (userId: string, title: string) => {
       viewerCount: 0,
       likesCount: 0,
       isLive: true,
-      createdAt: new Date().toISOString()
+      createdAt: Date.now()
     };
     await db.collection(COLLECTIONS.LIVESTREAMS).doc(livestreamId).set(newLive);
     return { success: true, livestream: newLive };
