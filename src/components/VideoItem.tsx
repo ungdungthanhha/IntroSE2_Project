@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent
 } from 'react-native';
 import Video from 'react-native-video';
-import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play } from 'lucide-react-native';
-import { Video as VideoType, User } from '../types/type';
+import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play, Flag } from 'lucide-react-native';
+import { Video as VideoType, User, ReportReason } from '../types/type';
 import * as videoService from '../services/videoService';
+import * as reportService from '../services/reportService';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -24,6 +25,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const reportScrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     isMounted.current = true;
@@ -43,6 +45,10 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
     { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
   ]);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
+  const [reportDetails, setReportDetails] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -63,6 +69,25 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
       setIsPaused(false);
     }
   }, [isActive]);
+
+  // HANDLE KEYBOARD EVENTS FOR REPORT MODAL
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const keyboardShowListener = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+
+    const keyboardHideListener = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      keyboardShowListener.remove();
+      keyboardHideListener.remove();
+    };
+  }, []);
 
   const togglePause = () => {
     setIsPaused(!isPaused);
@@ -94,6 +119,39 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
     await videoService.toggleSaveVideo(video.id, currentUserId, isSaved);
   };
+
+  const handleReportSubmit = async () => {
+    if (!currentUserId || !selectedReason) {
+      Alert.alert('Error', 'Please select a reason for reporting');
+      return;
+    }
+
+    const result = await reportService.submitVideoReport(
+      video.id,
+      currentUserId,
+      video.ownerName, // Using current user's name
+      selectedReason,
+      reportDetails
+    );
+
+    if (result.success) {
+      Alert.alert('Success', 'Report submitted successfully. Thank you for helping keep our community safe.');
+      setShowReportModal(false);
+      setSelectedReason(null);
+      setReportDetails('');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to submit report');
+    }
+  };
+
+  const reportReasons = [
+    { value: ReportReason.SPAM, label: 'Spam or misleading' },
+    { value: ReportReason.INAPPROPRIATE, label: 'Inappropriate content' },
+    { value: ReportReason.HARASSMENT, label: 'Harassment or bullying' },
+    { value: ReportReason.VIOLENCE, label: 'Violence or dangerous content' },
+    { value: ReportReason.FALSE_INFO, label: 'False information' },
+    { value: ReportReason.OTHER, label: 'Other' },
+  ];
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -200,6 +258,11 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             <Text style={styles.actionText}>Share</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.action} onPress={() => setShowReportModal(true)}>
+            <Flag size={35} color="#fff" />
+            <Text style={styles.actionText}>Report</Text>
+          </TouchableOpacity>
+
           <Animated.View style={[styles.discContainer, { transform: [{ rotate: spin }] }]}>
             <Image source={{ uri: video.ownerAvatar }} style={styles.discImg} />
           </Animated.View>
@@ -222,6 +285,93 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
         </View>
       </View>
+
+      {/* REPORT MODAL */}
+      {showReportModal && (
+        <View style={styles.reportModal}>
+          <View style={styles.reportHeader}>
+            <Text style={styles.reportTitle}>Report Video</Text>
+            <TouchableOpacity onPress={() => setShowReportModal(false)}>
+              <X size={24} color="#000" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            ref={reportScrollViewRef}
+            style={styles.reportContent}
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 20 }}
+          >
+            <Text style={styles.reportSubtitle}>Why are you reporting this video?</Text>
+
+            {reportReasons.map((reason) => (
+              <TouchableOpacity
+                key={reason.value}
+                style={[
+                  styles.reportReasonItem,
+                  selectedReason === reason.value && styles.reportReasonSelected
+                ]}
+                onPress={() => setSelectedReason(reason.value)}
+              >
+                <View style={[
+                  styles.radioButton,
+                  selectedReason === reason.value && styles.radioButtonSelected
+                ]}>
+                  {selectedReason === reason.value && (
+                    <View style={styles.radioButtonInner} />
+                  )}
+                </View>
+                <Text style={styles.reportReasonText}>{reason.label}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {selectedReason === ReportReason.OTHER && (
+              <View style={styles.reportDetailsContainer}>
+                <Text style={styles.reportDetailsLabel}>Please provide more details:</Text>
+                <TextInput
+                  style={styles.reportDetailsInput}
+                  placeholder="Describe the issue..."
+                  value={reportDetails}
+                  onChangeText={setReportDetails}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      reportScrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 300);
+                  }}
+                />
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.reportActions}>
+            <TouchableOpacity
+              style={styles.reportCancelButton}
+              onPress={() => {
+                setShowReportModal(false);
+                setSelectedReason(null);
+                setReportDetails('');
+              }}
+            >
+              <Text style={styles.reportCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.reportSubmitButton,
+                !selectedReason && styles.reportSubmitButtonDisabled
+              ]}
+              onPress={handleReportSubmit}
+              disabled={!selectedReason}
+            >
+              <Text style={styles.reportSubmitText}>Submit Report</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* MODAL COMMENT GIẢ LẬP */}
       {showComments && (
@@ -322,5 +472,27 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11, color: '#999' },
   commentReply: { fontSize: 11, fontWeight: 'bold', color: '#666' },
   inputContainer: { flexDirection: 'row', padding: 10, borderTopWidth: 0.5, borderColor: '#eee', alignItems: 'center', gap: 10 },
-  input: { flex: 1, height: 36, backgroundColor: '#f0f0f0', borderRadius: 18, paddingHorizontal: 12 }
+  input: { flex: 1, height: 36, backgroundColor: '#f0f0f0', borderRadius: 18, paddingHorizontal: 12 },
+
+  // Report Modal
+  reportModal: { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '75%', backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, zIndex: 100 },
+  reportHeader: { padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderColor: '#eee' },
+  reportTitle: { fontWeight: 'bold', fontSize: 18, color: '#000' },
+  reportContent: { maxHeight: '100%', padding: 16 },
+  reportSubtitle: { fontSize: 16, fontWeight: '600', marginBottom: 16, color: '#333' },
+  reportReasonItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, marginBottom: 8, borderRadius: 8, backgroundColor: '#f8f8f8' },
+  reportReasonSelected: { backgroundColor: '#ffe5e5', borderWidth: 1, borderColor: '#fe2c55' },
+  radioButton: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#ccc', marginRight: 12, justifyContent: 'center', alignItems: 'center' },
+  radioButtonSelected: { borderColor: '#fe2c55' },
+  radioButtonInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fe2c55' },
+  reportReasonText: { fontSize: 15, color: '#333', flex: 1 },
+  reportDetailsContainer: { marginTop: 20 },
+  reportDetailsLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#333' },
+  reportDetailsInput: { backgroundColor: '#f8f8f8', borderRadius: 8, padding: 12, fontSize: 14, minHeight: 100, borderWidth: 1, borderColor: '#e0e0e0' },
+  reportActions: { flexDirection: 'row', padding: 16, gap: 12, borderTopWidth: 1, borderColor: '#eee' },
+  reportCancelButton: { flex: 1, paddingVertical: 14, borderRadius: 8, backgroundColor: '#f0f0f0', alignItems: 'center' },
+  reportCancelText: { fontSize: 16, fontWeight: '600', color: '#666' },
+  reportSubmitButton: { flex: 1, paddingVertical: 14, borderRadius: 8, backgroundColor: '#fe2c55', alignItems: 'center' },
+  reportSubmitButtonDisabled: { backgroundColor: '#ccc' },
+  reportSubmitText: { fontSize: 16, fontWeight: '600', color: '#fff' },
 });

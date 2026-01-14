@@ -88,3 +88,23 @@ export enum AppTab {
   PROFILE = 'profile',
   LIVE = 'live'
 }
+
+export enum ReportReason {
+  SPAM = 'spam',
+  INAPPROPRIATE = 'inappropriate',
+  HARASSMENT = 'harassment',
+  VIOLENCE = 'violence',
+  FALSE_INFO = 'false_info',
+  OTHER = 'other'
+}
+
+export interface Report {
+  id: string;
+  videoId: string;
+  reportedBy: string;        // User ID who reported
+  reporterName: string;       // Username for display
+  reason: ReportReason;
+  additionalInfo?: string;    // Optional additional details
+  timestamp: number;
+  status: 'pending' | 'reviewed' | 'dismissed';
+}
