@@ -1,5 +1,6 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '@env';
 
 
 
@@ -193,8 +194,8 @@ export const searchUsers = async (query: string): Promise<User[]> => {
 };
 
 const uploadImageToCloudinary = async (imageUri: string): Promise<string | null> => {
-  const cloudName = 'dvmfpcxz8';
-  const uploadPreset = 'tictoc_uploads';
+  const cloudName = CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = CLOUDINARY_UPLOAD_PRESET;
 
   const formData = new FormData();
   formData.append('file', {
@@ -204,19 +205,22 @@ const uploadImageToCloudinary = async (imageUri: string): Promise<string | null>
   } as any);
   formData.append('upload_preset', uploadPreset);
 
+  console.log('DEBUG: UPLOAD ENV:', { cloudName, uploadPreset });
+
   try {
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
       {
         method: 'POST',
-        body: formData,
+        body: formData as any,
         headers: { 'Content-Type': 'multipart/form-data' },
       }
     );
-    const data = await response.json();
+    const data: any = await response.json();
     if (data.secure_url) {
       console.log('Cloudinary Image Upload Success:', data.secure_url);
-      return data.secure_url;
+      // Optimize Avatar: w_800, c_limit, f_auto, q_auto
+      return data.secure_url.replace('/upload/', '/upload/w_800,c_limit,f_auto,q_auto/');
     }
     console.error('Cloudinary Upload Failed:', data);
     return null;

@@ -2,7 +2,7 @@
 export interface User {
   uid: string;
   username: string;
-  role: 'admin' | 'user'; 
+  role: 'admin' | 'user';
   displayName: string;
   email: string;
   birthday: string;
@@ -24,7 +24,7 @@ export interface Video {
   likesCount: number;
   commentsCount: number;
   savesCount: number;
-  timestamp: number;
+  createdAt: number;
   isLiked?: boolean;
   isSaved?: boolean;
   thumbUrl?: string;
@@ -45,7 +45,7 @@ export interface Message {
   chatId: string;
   senderId: string;
   text: string;
-  timestamp:  number;
+  timestamp: number;
 }
 
 export interface Chat {

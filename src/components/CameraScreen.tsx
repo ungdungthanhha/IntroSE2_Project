@@ -23,17 +23,17 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
   const [cameraPosition, setCameraPosition] = useState<'front' | 'back'>('front');
   const device = useCameraDevice(cameraPosition);
   const cameraRef = useRef<Camera>(null);
-  
+
   const [isRecording, setIsRecording] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
   const [hasCamPermission, setHasCamPermission] = useState(false);
   const [hasMicPermission, setHasMicPermission] = useState(false);
-  
+
   const [duration, setDuration] = useState<15 | 60>(60);
-  
+
   // Animation
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const timerInterval = useRef<NodeJS.Timeout | null>(null);
+  const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const circleSize = 80;
   const strokeWidth = 6;
@@ -113,7 +113,7 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
   const startTimer = () => {
     setVideoDuration(0);
     progressAnim.setValue(0);
-    
+
     Animated.timing(progressAnim, {
       toValue: 1,
       duration: duration * 1000,
@@ -148,7 +148,7 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
         startTimer();
         await cameraRef.current.startRecording({
           onRecordingFinished: (video) => {
-            const path = Platform.OS === 'android' && !video.path.startsWith('file://') 
+            const path = Platform.OS === 'android' && !video.path.startsWith('file://')
               ? `file://${video.path}` : video.path;
             stopTimer();
             setIsRecording(false);
@@ -208,12 +208,12 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
           <TouchableOpacity onPress={onClose} style={styles.iconButton}>
             <X size={28} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.soundButton}>
             <Music size={14} color="#fff" />
             <Text style={styles.soundText}>Sounds</Text>
           </TouchableOpacity>
-          <View style={{width: 28}} /> 
+          <View style={{ width: 28 }} />
         </View>
 
         {/* SIDEBAR: Chỉ hiện khi KHÔNG quay */}
@@ -221,8 +221,8 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
           {!isRecording && (
             <View style={styles.rightSidebar}>
               <TouchableOpacity style={styles.sidebarItem} onPress={handleFlipCamera}>
-                 <RotateCcw size={24} color="#fff" />
-                 <Text style={styles.sidebarText}>Flip</Text>
+                <RotateCcw size={24} color="#fff" />
+                <Text style={styles.sidebarText}>Flip</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarItem}><Zap size={24} color="#fff" /><Text style={styles.sidebarText}>Speed</Text></TouchableOpacity>
               <TouchableOpacity style={styles.sidebarItem}><Wand2 size={24} color="#fff" /><Text style={styles.sidebarText}>Beauty</Text></TouchableOpacity>
@@ -233,7 +233,7 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
 
         {/* FOOTER */}
         <View style={styles.footerContainer}>
-          
+
           {/* Chọn thời gian (Chỉ hiện khi chưa quay) */}
           {!isRecording && (
             <View style={styles.durationRow}>
@@ -256,13 +256,13 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
             {/* CENTER: Record Button */}
             <TouchableOpacity activeOpacity={1} onPress={handleRecordPress} style={styles.recordButtonWrapper}>
               <Svg height={circleSize} width={circleSize} style={styles.svgContainer}>
-                <Circle cx={circleSize/2} cy={circleSize/2} r={radius} stroke="rgba(255,255,255,0.3)" strokeWidth={strokeWidth} fill="transparent" />
+                <Circle cx={circleSize / 2} cy={circleSize / 2} r={radius} stroke="rgba(255,255,255,0.3)" strokeWidth={strokeWidth} fill="transparent" />
                 <AnimatedCircle
-                  cx={circleSize/2} cy={circleSize/2} r={radius}
+                  cx={circleSize / 2} cy={circleSize / 2} r={radius}
                   stroke="#EE1D52" strokeWidth={strokeWidth} fill="transparent"
                   strokeDasharray={`${circumference} ${circumference}`}
                   strokeDashoffset={strokeDashoffset}
-                  strokeLinecap="round" rotation="-90" origin={`${circleSize/2}, ${circleSize/2}`}
+                  strokeLinecap="round" rotation="-90" origin={`${circleSize / 2}, ${circleSize / 2}`}
                 />
               </Svg>
               <View style={[styles.innerRecordBtn, isRecording && styles.innerRecordBtnRecording]} />
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   bodyContainer: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 20 },
   rightSidebar: { alignItems: 'center', gap: 20 },
   sidebarItem: { alignItems: 'center', gap: 4 },
-  sidebarText: { color: '#fff', fontSize: 10, fontWeight: '600', textShadowColor:'rgba(0,0,0,0.5)', textShadowRadius: 3 },
+  sidebarText: { color: '#fff', fontSize: 10, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
   footerContainer: { paddingBottom: 50 },
   durationRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 20, height: 30 },
   durationText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600' },

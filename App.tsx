@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
   FlatList, Dimensions, StatusBar, Platform,
-  ActivityIndicator, Alert
+  ActivityIndicator, Alert, RefreshControl
 } from 'react-native';
 import { ArrowLeft, Tv, Search } from 'lucide-react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -154,15 +154,25 @@ const AppContent = () => {
     return () => clearInterval(interval);
   }, [isTimeLimitIgnored]);
 
-  const fetchVideos = async () => {
-    setIsLoading(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchVideos = async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
-      const snapshot = await db.collection('videos').get();
-      if (!snapshot.empty) {
-        setVideos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as VideoType[]);
+      const allVideos = await videoService.getAllVideos();
+      if (allVideos.length > 0) {
+        setVideos(allVideos);
       } else { setVideos(MOCK_VIDEOS); }
     } catch (e) { setVideos(MOCK_VIDEOS); }
-    finally { setIsLoading(false); }
+    finally {
+      if (showLoading) setIsLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchVideos(false);
+    setIsRefreshing(false);
   };
 
   useEffect(() => { fetchVideos(); }, []);
@@ -291,6 +301,9 @@ const AppContent = () => {
                       {isLoading ? <ActivityIndicator style={{ marginTop: 50 }} color="#fe2c55" /> : (
                         <FlatList
                           data={videos}
+                          refreshControl={
+                            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#fff" />
+                          }
                           keyExtractor={item => item.id}
                           renderItem={({ item, index }) => (
                             <VideoItem
@@ -329,7 +342,7 @@ const AppContent = () => {
                   />
                 )}
 
-                {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} />}
+                {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} />}
                 {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); if (currentUser?.uid) videoService.getVideosByUser(currentUser.uid).then(setMyVideos); setActiveTab(AppTab.HOME); }} />}
                 {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} currentUser={currentUser!} />}
 

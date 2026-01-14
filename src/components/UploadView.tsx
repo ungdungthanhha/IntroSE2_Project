@@ -40,7 +40,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
           videoUrl: cloud.videoUrl,
           thumbUrl: cloud.thumbUrl,
           caption,
-          createdAt: new Date().toISOString()
+          createdAt: Date.now()
         };
         await videoService.saveVideoMetadata(meta);
         onPost(meta);
@@ -56,22 +56,22 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser })
   return (
     <View style={styles.container}>
       {step === 'camera' && (
-        <CameraScreen 
-          onClose={onClose} 
+        <CameraScreen
+          onClose={onClose}
           onVideoRecorded={handleVideoReady}
         />
       )}
 
       {step === 'preview' && videoPath && (
-        <PreviewScreen 
-          videoPath={videoPath} 
+        <PreviewScreen
+          videoPath={videoPath}
           onBack={() => setStep('camera')}
           onNext={handleGoToDetails}
         />
       )}
 
       {step === 'details' && videoPath && (
-        <DetailsScreen 
+        <DetailsScreen
           videoPath={videoPath}
           onBack={() => setStep('preview')}
           onSubmit={handlePostVideo}
