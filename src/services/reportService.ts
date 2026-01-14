@@ -13,16 +13,18 @@ export const submitVideoReport = async (
     additionalInfo?: string
 ): Promise<{ success: boolean; error?: string; reportId?: string }> => {
     try {
-        // Check if user already reported this video
+        // Check if user has a PENDING report for this video
+        // User can report again if their previous report was already handled by admin
         const existingReport = await db
             .collection(COLLECTIONS.REPORTS)
             .where('videoId', '==', videoId)
             .where('reportedBy', '==', reportedBy)
+            .where('status', '==', 'pending')
             .limit(1)
             .get();
 
         if (!existingReport.empty) {
-            return { success: false, error: 'You have already reported this video' };
+            return { success: false, error: 'You have already reported this video. Please wait for admin to review.' };
         }
 
         // Create new report
@@ -67,7 +69,8 @@ export const getUserReports = async (userId: string): Promise<Report[]> => {
 };
 
 /**
- * Check if user has already reported a specific video
+ * Check if user has a pending report for a specific video
+ * Returns true only if there's an unhandled (pending) report
  */
 export const checkIfUserReportedVideo = async (
     videoId: string,
@@ -78,6 +81,7 @@ export const checkIfUserReportedVideo = async (
             .collection(COLLECTIONS.REPORTS)
             .where('videoId', '==', videoId)
             .where('reportedBy', '==', userId)
+            .where('status', '==', 'pending')
             .limit(1)
             .get();
 
