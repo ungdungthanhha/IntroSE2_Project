@@ -1,23 +1,23 @@
 // src/services/dataService.ts
 
-import { 
-  collection, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
   getDoc,
   query,
   orderBy
 } from "firebase/firestore";
-import { db, COLLECTIONS } from "../services/firebase"; 
+import { db, COLLECTIONS } from "../services/firebase";
 import type { User, Video, Report } from "../types/types";
 
 // --- TYPE MỞ RỘNG (Dùng cho nội bộ Admin) ---
 
 // Report đầy đủ thông tin (gồm cả data Video và User để hiển thị lên bảng)
 export type ReportPopulated = Report & {
-  videoData?: Video; 
+  videoData?: Video;
   reporterData?: User;
 };
 
@@ -31,7 +31,7 @@ export const getVideos = async (): Promise<Video[]> => {
     // Sắp xếp video mới nhất lên đầu
     const q = query(videosRef, orderBy("timestamp", "desc"));
     const snapshot = await getDocs(q);
-    
+
     // Ép kiểu về Video chuẩn
     return snapshot.docs.map((d) => ({
       id: d.id,
@@ -39,7 +39,7 @@ export const getVideos = async (): Promise<Video[]> => {
     })) as Video[];
   } catch (error) {
     console.error("Lỗi lấy danh sách Video:", error);
-    return []; 
+    return [];
   }
 };
 
@@ -61,7 +61,7 @@ export const getUsers = async (): Promise<User[]> => {
   try {
     const snapshot = await getDocs(collection(db, COLLECTIONS.USERS));
     return snapshot.docs.map((d) => ({
-      uid: d.id, 
+      uid: d.id,
       ...d.data(),
     })) as User[];
   } catch (error) {
@@ -91,11 +91,26 @@ export const getReportsFull = async (): Promise<ReportPopulated[]> => {
   try {
     // Nếu chưa có collection REPORTS trong config thì fallback về string "reports"
     const reportColName = COLLECTIONS.REPORTS || "reports";
-    
+
+    // Lấy tất cả reports (sắp xếp sẽ thực hiện ở client vì có thể dùng timestamp hoặc createdAt)
+    const reportSnap = await getDocs(collection(db, reportColName));
+
+    const rawReports = reportSnap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        // Normalize: đảm bảo cả reportedBy và reportedByUid đều có giá trị
+        reportedBy: data.reportedBy || data.reportedByUid || '',
+        reportedByUid: data.reportedByUid || data.reportedBy || '',
+        // Normalize: đảm bảo có timestamp
+        createdAt: data.createdAt || data.timestamp || 0,
+        timestamp: data.timestamp || data.createdAt || 0,
+      } as Report;
+    });
+
     // Sắp xếp báo cáo mới nhất lên đầu
-    const reportSnap = await getDocs(query(collection(db, reportColName), orderBy("createdAt", "desc")));
-    
-    const rawReports = reportSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Report[];
+    rawReports.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
     // Kỹ thuật Populate: Lấy thêm thông tin Video và User dựa trên ID có trong report
     const populatedReports = await Promise.all(
@@ -111,18 +126,21 @@ export const getReportsFull = async (): Promise<ReportPopulated[]> => {
           }
         } catch (e) { console.warn(`Video lỗi hoặc đã bị xóa: ${report.videoId}`); }
 
-        // 2. Lấy info Người báo cáo
-        try {
-          const userSnap = await getDoc(doc(db, COLLECTIONS.USERS, report.reportedByUid));
-          if (userSnap.exists()) {
-            reporterData = { uid: userSnap.id, ...userSnap.data() } as User;
-          }
-        } catch (e) { console.warn(`User báo cáo không tồn tại: ${report.reportedByUid}`); }
+        // 2. Lấy info Người báo cáo (dùng reportedBy hoặc reportedByUid)
+        const reporterUid = report.reportedBy || report.reportedByUid;
+        if (reporterUid) {
+          try {
+            const userSnap = await getDoc(doc(db, COLLECTIONS.USERS, reporterUid));
+            if (userSnap.exists()) {
+              reporterData = { uid: userSnap.id, ...userSnap.data() } as User;
+            }
+          } catch (e) { console.warn(`User báo cáo không tồn tại: ${reporterUid}`); }
+        }
 
         return {
           ...report,
-          videoData,    
-          reporterData  
+          videoData,
+          reporterData
         };
       })
     );
@@ -139,8 +157,8 @@ export const updateReportStatus = async (reportId: string, newStatus: 'resolved'
   try {
     const reportColName = COLLECTIONS.REPORTS || "reports";
     const reportRef = doc(db, reportColName, reportId);
-    await updateDoc(reportRef, { 
-      status: newStatus 
+    await updateDoc(reportRef, {
+      status: newStatus
     });
   } catch (error) {
     console.error("Lỗi update report:", error);
