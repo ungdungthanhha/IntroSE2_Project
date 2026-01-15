@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState
 } from 'react-native';
 import Video from 'react-native-video';
 import SoundPlayer from 'react-native-sound';
@@ -55,6 +55,10 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           console.log('[VideoItem] Error loading sound:', error);
           return;
         }
+        if (soundRef.current !== sound) {
+          sound.release();
+          return;
+        }
         sound.setNumberOfLoops(-1); // Loop vô hạn
         sound.play();
       });
@@ -68,6 +72,21 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
       soundRef.current = null;
     };
   }, [video.soundAudioUrl, isActive]);
+
+  // Handle App State (Background/Foreground)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState.match(/inactive|background/)) {
+        soundRef.current?.pause();
+      } else if (nextAppState === 'active' && isActive && !isPaused && soundRef.current) {
+        soundRef.current.play();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isActive, isPaused]);
 
   // Pause/Resume sound khi tap video
   useEffect(() => {
