@@ -32,6 +32,7 @@ export interface Video {
   soundId: string;
   soundName: string;
   soundThumb: string;
+  soundAudioUrl?: string | null; // Link audio để phát song song với video
 }
 
 export interface Sound {
@@ -39,10 +40,10 @@ export interface Sound {
   name: string;             // Tên hiển thị
   ownerUid: string;         // 'apple_music' hoặc uid của user
   ownerName: string;        // Tên ca sĩ hoặc username
-  ownerAvatar: string;      
+  ownerAvatar: string;
   audioUrl: string;         // Link mp3/preview
   thumbnailUrl: string;
-  usageCount: number;       
+  usageCount: number;
   createdAt: number;
   isSystemSound?: boolean;  // True nếu là nhạc iTunes
   originalVideoId?: string; // Nếu là Original Sound, lưu ID video gốc

@@ -7,7 +7,7 @@ const SOUND_COLLECTION = 'sounds';
 export const createOriginalSound = async (videoId: string, videoUrl: string, user: any): Promise<Sound> => {
   const soundId = firestore().collection(SOUND_COLLECTION).doc().id;
   // Cloudinary: đổi đuôi .mp4 -> .mp3 để lấy audio
-  const audioUrl = videoUrl.replace(/\.mp4$/i, '.mp3'); 
+  const audioUrl = videoUrl.replace(/\.mp4$/i, '.mp3');
 
   const newSound: Sound = {
     id: soundId,
@@ -15,9 +15,9 @@ export const createOriginalSound = async (videoId: string, videoUrl: string, use
     ownerUid: user.uid,
     ownerName: user.displayName || user.username,
     ownerAvatar: user.avatarUrl,
-    audioUrl: audioUrl, 
+    audioUrl: audioUrl,
     thumbnailUrl: user.avatarUrl,
-    usageCount: 1, 
+    usageCount: 1,
     originalVideoId: videoId,
     createdAt: Date.now(),
     isSystemSound: false
@@ -36,7 +36,7 @@ export const getInternalSounds = async (): Promise<Sound[]> => {
       .orderBy('usageCount', 'desc')       // Sound hot lên đầu
       .limit(20)
       .get();
-    
+
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sound));
   } catch (error) {
     console.log("Error fetch internal sounds:", error);
@@ -69,9 +69,16 @@ export const updateSoundName = async (soundId: string, newName: string) => {
   });
 };
 
-// 5. Tăng lượt dùng
+// 5. Tăng lượt dùng (safe - không crash nếu document không tồn tại)
 export const incrementSoundUsage = async (soundId: string) => {
-  await firestore().collection(SOUND_COLLECTION).doc(soundId).update({
-    usageCount: firestore.FieldValue.increment(1)
-  });
+  const docRef = firestore().collection(SOUND_COLLECTION).doc(soundId);
+  const doc = await docRef.get();
+
+  if (doc.exists()) {
+    await docRef.update({
+      usageCount: firestore.FieldValue.increment(1)
+    });
+  } else {
+    console.warn(`Sound ${soundId} not found, skipping increment.`);
+  }
 };

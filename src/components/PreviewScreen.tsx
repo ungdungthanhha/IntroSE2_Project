@@ -32,13 +32,13 @@ const PreviewScreen: React.FC<PreviewScreenProps> = ({ videoPath, onBack, onNext
           console.log('Lỗi load nhạc:', error);
           return;
         }
-        
+
         // Mặc định cho loop vô tận (để lỡ video bị lag thì nhạc không tắt)
         // Nhưng ta sẽ kiểm soát việc loop bằng tay ở dưới
-        sound.setNumberOfLoops(-1); 
+        sound.setNumberOfLoops(-1);
         sound.play();
       });
-      
+
       soundRef.current = sound;
     }
 
@@ -59,13 +59,13 @@ const PreviewScreen: React.FC<PreviewScreenProps> = ({ videoPath, onBack, onNext
     // Nếu video đang ở những giây đầu tiên (ví dụ < 0.25s) 
     // Tức là video vừa mới Hết Loop và quay lại từ đầu
     if (currentTime < 0.25) {
-      
+
       if (!isLoopingRef.current) {
         // ==> RA LỆNH: Tua nhạc về 0 ngay lập tức
         soundRef.current?.setCurrentTime(0);
         isLoopingRef.current = true; // Đánh dấu là đã xử lý loop này rồi
       }
-      
+
     } else {
       // Khi video chạy qua 0.25s thì reset cờ để chờ lần loop sau
       isLoopingRef.current = false;
@@ -86,10 +86,10 @@ const PreviewScreen: React.FC<PreviewScreenProps> = ({ videoPath, onBack, onNext
         // onLoad={() => setIsVideoLoaded(true)}
         onProgress={handleVideoProgress}
         bufferConfig={{
-            minBufferMs: 2000,
-            maxBufferMs: 10000,
-            bufferForPlaybackMs: 500,
-            bufferForPlaybackAfterRebufferMs: 1000
+          minBufferMs: 2000,
+          maxBufferMs: 10000,
+          bufferForPlaybackMs: 500,
+          bufferForPlaybackAfterRebufferMs: 1000
         }}
       />
 
@@ -118,13 +118,20 @@ const PreviewScreen: React.FC<PreviewScreenProps> = ({ videoPath, onBack, onNext
             <X size={28} color="#fff" style={styles.shadow} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.soundBadge} onPress={onChangeSound}>
-            <Music size={14} color="#fff" />
-            <Text style={styles.soundTextHeader} numberOfLines={1}>
-              {/* Nếu có selectedSound thì hiện tên, không thì hiện Original Sound */}
-              {selectedSound ? selectedSound.name : "Original Sound"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.soundBadgeContainer}>
+            <TouchableOpacity style={styles.soundBadge} onPress={onChangeSound}>
+              <Music size={14} color="#fff" />
+              <Text style={styles.soundTextHeader} numberOfLines={1}>
+                {selectedSound ? selectedSound.name : "Add Sound"}
+              </Text>
+            </TouchableOpacity>
+
+            {selectedSound && onRemoveSound && (
+              <TouchableOpacity style={styles.removeSoundBtn} onPress={onRemoveSound}>
+                <X size={12} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* View rỗng để cân bằng layout header */}
           <View style={{ width: 28 }} />
@@ -186,19 +193,33 @@ const styles = StyleSheet.create({
   iconButton: { padding: 4 },
 
   // Style cho cục âm thanh trên cùng
-  soundBadge: {
+  // Style cho cục âm thanh trên cùng
+  soundBadgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
     borderRadius: 20,
+    paddingHorizontal: 8,
+    gap: 4
+  },
+  soundBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     gap: 8
+  },
+  removeSoundBtn: {
+    padding: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 15
   },
   soundTextHeader: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600'
+    fontWeight: '600',
+    maxWidth: 120
+
   },
 
   shadow: { shadowColor: '#000', shadowRadius: 5, shadowOpacity: 0.5 },

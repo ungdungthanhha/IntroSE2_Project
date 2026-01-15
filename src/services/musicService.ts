@@ -5,13 +5,27 @@ import firestore from '@react-native-firebase/firestore';
 // API iTunes (Miễn phí, không cần key)
 const ITUNES_API = 'https://itunes.apple.com/search';
 
+// Type cho iTunes API response
+interface ITunesTrack {
+  trackId: number;
+  trackName: string;
+  artistName: string;
+  artworkUrl100: string;
+  previewUrl: string;
+}
+
+interface ITunesResponse {
+  resultCount: number;
+  results: ITunesTrack[];
+}
+
 export const searchMusic = async (term: string): Promise<Sound[]> => {
   try {
     const response = await fetch(`${ITUNES_API}?term=${encodeURIComponent(term)}&media=music&entity=song&limit=20`);
-    const data = await response.json();
+    const data = await response.json() as ITunesResponse;
 
     // Map dữ liệu từ iTunes về cấu trúc Sound của App
-    return data.results.map((item: any) => ({
+    return data.results.map((item) => ({
       id: `itunes_${item.trackId}`, // Tạo ID riêng để không trùng với ID tự sinh
       name: item.trackName,
       ownerUid: 'apple_music', // System user
@@ -34,17 +48,20 @@ export const searchMusic = async (term: string): Promise<Sound[]> => {
 export const ensureSystemSoundExists = async (sound: Sound) => {
   const soundRef = firestore().collection('sounds').doc(sound.id);
   const doc = await soundRef.get();
-  
-  if (!doc.exists) {
+  const docData = doc.data();
+
+  if (!docData) {
     // Nếu chưa có thì lưu vào DB lần đầu tiên
+    console.log('[Music] Creating new system sound:', sound.id);
     await soundRef.set({
-        ...sound,
-        usageCount: 1 // Bắt đầu tính là 1
+      ...sound,
+      usageCount: 1 // Bắt đầu tính là 1
     });
   } else {
-    // Nếu có rồi thì tăng usage
-    await soundRef.update({
-        usageCount: firestore.FieldValue.increment(1)
-    });
+    // Nếu có rồi thì tăng usage - dùng set với merge để an toàn hơn
+    console.log('[Music] Incrementing usage for sound:', sound.id);
+    await soundRef.set({
+      usageCount: firestore.FieldValue.increment(1)
+    }, { merge: true });
   }
 };

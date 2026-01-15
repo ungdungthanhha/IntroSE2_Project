@@ -17,7 +17,7 @@ interface UploadViewProps {
   initialSound?: Sound;
 }
 
-const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, initialSound}) => {
+const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, initialSound }) => {
   const [step, setStep] = useState<'camera' | 'preview' | 'details'>('camera');
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [isMusicPickerVisible, setMusicPickerVisible] = useState(false);
@@ -43,36 +43,47 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, i
     if (!videoPath) return;
     setIsLoading(true);
     try {
+      console.log('[Upload] Step 1: Uploading to Cloudinary...');
       const cloud = await videoService.uploadVideoToCloudinary(videoPath);
       if (!cloud) throw new Error("Upload failed");
+      console.log('[Upload] Step 1 DONE:', cloud.videoUrl);
+
       const newVideoId = firestore().collection('videos').doc().id;
-      
+      console.log('[Upload] New Video ID:', newVideoId);
+
       let finalSoundData = { id: '', name: '', thumb: '' };
 
       // 2. Xử lý Sound
       if (selectedSound) {
+        console.log('[Upload] Step 2: Processing selected sound...', selectedSound.id);
         // A. Sử dụng sound có sẵn (iTunes hoặc App Sound)
         if (selectedSound.isSystemSound) {
-           await musicService.ensureSystemSoundExists(selectedSound); // Đảm bảo iTunes sound có trong DB
+          console.log('[Upload] Step 2a: Ensuring system sound exists...');
+          await musicService.ensureSystemSoundExists(selectedSound); // Đảm bảo iTunes sound có trong DB
         } else {
-           await soundService.incrementSoundUsage(selectedSound.id); // Tăng count cho App Sound
+          console.log('[Upload] Step 2b: Incrementing app sound usage...');
+          await soundService.incrementSoundUsage(selectedSound.id); // Tăng count cho App Sound
         }
-        finalSoundData = { 
-          id: selectedSound.id, 
-          name: selectedSound.name, 
-          thumb: selectedSound.thumbnailUrl 
+        finalSoundData = {
+          id: selectedSound.id,
+          name: selectedSound.name,
+          thumb: selectedSound.thumbnailUrl
         };
+        console.log('[Upload] Step 2 DONE');
       } else {
         // B. Tạo "Âm thanh gốc" từ video này
+        console.log('[Upload] Step 2c: Creating original sound...');
         const newSound = await soundService.createOriginalSound(newVideoId, cloud.videoUrl, currentUser);
-        finalSoundData = { 
-          id: newSound.id, 
-          name: newSound.name, 
-          thumb: newSound.thumbnailUrl 
+        finalSoundData = {
+          id: newSound.id,
+          name: newSound.name,
+          thumb: newSound.thumbnailUrl
         };
+        console.log('[Upload] Step 2 DONE - Original sound created:', newSound.id);
       }
 
       // 3. Save Metadata
+      console.log('[Upload] Step 3: Saving video metadata...');
       const videoMeta = {
         id: newVideoId,
         ownerUid: currentUser?.uid,
@@ -81,11 +92,11 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, i
         videoUrl: cloud.videoUrl,
         thumbUrl: cloud.thumbUrl,
         caption,
-        
+
         soundId: finalSoundData.id,
         soundName: finalSoundData.name,
         soundThumb: finalSoundData.thumb,
-        
+
         // Lưu link nhạc để VideoItem phát song song (quan trọng)
         soundAudioUrl: selectedSound ? selectedSound.audioUrl : null,
 
@@ -96,10 +107,13 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, i
       };
 
       await videoService.saveVideoMetadata(videoMeta);
+      console.log('[Upload] Step 3 DONE - Video saved!');
+
       onPost(videoMeta);
       onClose();
-    } catch (e) {
-      Alert.alert('Error', (e as any).message);
+    } catch (e: any) {
+      console.error('[Upload] ERROR:', e.message, e);
+      Alert.alert('Error', e.message);
     } finally {
       setIsLoading(false);
     }
@@ -112,13 +126,15 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, i
         visible={isMusicPickerVisible}
         onClose={() => setMusicPickerVisible(false)}
         onSelect={(sound) => setSelectedSound(sound)}
+        currentSound={selectedSound}
+        onRemove={() => setSelectedSound(undefined)}
       />
 
       {step === 'camera' && (
         <CameraScreen
           onClose={onClose}
           onVideoRecorded={handleVideoReady}
-          selectedSound={selectedSound} 
+          selectedSound={selectedSound}
           onOpenMusicPicker={handleOpenMusicPicker}
         />
       )}
@@ -129,6 +145,8 @@ const UploadView: React.FC<UploadViewProps> = ({ onClose, onPost, currentUser, i
           onBack={() => setStep('camera')}
           onNext={handleGoToDetails}
           selectedSound={selectedSound}
+          onChangeSound={handleOpenMusicPicker}
+          onRemoveSound={() => setSelectedSound(undefined)}
         />
       )}
 

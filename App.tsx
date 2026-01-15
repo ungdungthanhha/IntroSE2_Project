@@ -92,6 +92,7 @@ const AppContent = () => {
         return true;
       }
     } catch (e: any) {
+      console.error('ensureUserDoc Error:', e);
       Alert.alert("Database Error", e.message);
       return false;
     } finally {
@@ -175,7 +176,11 @@ const AppContent = () => {
     setIsRefreshing(false);
   };
 
-  useEffect(() => { fetchVideos(); }, []);
+  useEffect(() => {
+    if (currentUser) {
+      fetchVideos();
+    }
+  }, [currentUser]);
 
   // Fetch My Videos
   useEffect(() => {

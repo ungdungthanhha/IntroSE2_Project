@@ -5,6 +5,7 @@ import {
   ScrollView, TextInput, KeyboardAvoidingView, Pressable
 } from 'react-native';
 import Video from 'react-native-video';
+import SoundPlayer from 'react-native-sound';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play } from 'lucide-react-native';
 import { Video as VideoType, User } from '../types/type';
 import * as videoService from '../services/videoService';
@@ -24,6 +25,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const soundRef = useRef<typeof SoundPlayer.prototype | null>(null);
 
   useEffect(() => {
     isMounted.current = true;
@@ -43,6 +45,41 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
     { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
   ]);
+
+  // PHÁT NHẠC NỀN (NẾU CÓ)
+  useEffect(() => {
+    // Nếu video có sound và đang active, load và phát nhạc
+    if (video.soundAudioUrl && isActive && !isPaused) {
+      const sound = new SoundPlayer(video.soundAudioUrl, '', (error) => {
+        if (error) {
+          console.log('[VideoItem] Error loading sound:', error);
+          return;
+        }
+        sound.setNumberOfLoops(-1); // Loop vô hạn
+        sound.play();
+      });
+      soundRef.current = sound;
+    }
+
+    return () => {
+      // Cleanup khi unmount hoặc không active
+      soundRef.current?.stop();
+      soundRef.current?.release();
+      soundRef.current = null;
+    };
+  }, [video.soundAudioUrl, isActive]);
+
+  // Pause/Resume sound khi tap video
+  useEffect(() => {
+    if (soundRef.current) {
+      if (isPaused) {
+        soundRef.current.pause();
+      } else {
+        soundRef.current.play();
+      }
+    }
+  }, [isPaused]);
+
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -124,6 +161,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           resizeMode="cover"
           repeat={true}
           paused={!isActive || isPaused}
+          muted={!!video.soundAudioUrl} // Mute video gốc nếu có nhạc nền
           playInBackground={false}
           playWhenInactive={false}
           onProgress={handleProgress}

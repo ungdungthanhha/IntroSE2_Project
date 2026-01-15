@@ -12,6 +12,15 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
   const cloudName = CLOUDINARY_CLOUD_NAME;
   const uploadPreset = CLOUDINARY_UPLOAD_PRESET;
 
+  console.log('[Cloudinary] Cloud Name:', cloudName);
+  console.log('[Cloudinary] Upload Preset:', uploadPreset);
+  console.log('[Cloudinary] File URI:', fileUri);
+
+  if (!cloudName || !uploadPreset) {
+    console.error('[Cloudinary] Missing credentials! Check .env file');
+    return null;
+  }
+
   const formData = new FormData();
   formData.append('file', {
     uri: fileUri,
@@ -35,6 +44,9 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
     }
 
     xhr.onload = () => {
+      console.log('[Cloudinary] Response status:', xhr.status);
+      console.log('[Cloudinary] Response body:', xhr.response);
+
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.response);
@@ -49,7 +61,7 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
           resolve(null);
         }
       } else {
-        console.error('Cloudinary Upload Failed:', xhr.response);
+        console.error('Cloudinary Upload Failed:', xhr.status, xhr.response);
         resolve(null);
       }
     };
