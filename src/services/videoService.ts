@@ -89,14 +89,14 @@ export const saveVideoMetadata = async (videoData: Partial<Video>) => {
 /**
  * 3. Lấy danh sách TOÀN BỘ video từ Firestore (Cho màn hình Feed)
  */
-export const getAllVideos = async (): Promise<Video[]> => {
+export const getAllVideos = async (userId?: string): Promise<Video[]> => {
   try {
     const snapshot = await db
       .collection(COLLECTIONS.VIDEOS)
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => {
+    const videos = snapshot.docs.map(doc => {
       const data = doc.data();
       // Normalize createdAt to timestamp number if it's a string
       const createdAt = typeof data.createdAt === 'string'
@@ -113,6 +113,23 @@ export const getAllVideos = async (): Promise<Video[]> => {
       if (timeDiff !== 0) return timeDiff;
       return (a.ownerUid || '').localeCompare(b.ownerUid || '');
     });
+
+    // If userId provided, fetch user's liked and saved videos to mark them
+    if (userId) {
+      const likedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').get();
+      const likedVideoIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+
+      const savedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').get();
+      const savedVideoIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
+      return videos.map(video => ({
+        ...video,
+        isLiked: likedVideoIds.has(video.id),
+        isSaved: savedVideoIds.has(video.id)
+      }));
+    }
+
+    return videos;
   } catch (error) {
     console.error('Error getting videos:', error);
     return [];

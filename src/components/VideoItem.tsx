@@ -20,9 +20,11 @@ interface VideoItemProps {
   onViewProfile?: (user: User) => void;
   itemHeight: number;
   currentUserId?: string; // New prop
+  onLikeChange?: (videoId: string, isLiked: boolean) => void; // Callback for like changes
+  onSaveChange?: (videoId: string, isSaved: boolean) => void; // Callback for save changes
 }
 
-const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId }) => {
+const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId, onLikeChange, onSaveChange }) => {
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -78,6 +80,14 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
       fetchComments();
     }
   }, [showComments]);
+
+  // Sync like/save state when video prop changes
+  useEffect(() => {
+    setIsLiked(video.isLiked || false);
+    setIsSaved(video.isSaved || false);
+    setLikeCount(video.likesCount || 0);
+    setSaveCount(video.savesCount || 0);
+  }, [video.id, video.isLiked, video.isSaved, video.likesCount, video.savesCount]);
 
   const fetchComments = async () => {
     setLoadingComments(true);
@@ -152,6 +162,11 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setLikeCount(prev => newStatus ? prev + 1 : prev - 1); // Optimistic update
 
     await videoService.toggleLikeVideo(video.id, currentUserId, !newStatus);
+    
+    // Notify parent component of like change
+    if (onLikeChange) {
+      onLikeChange(video.id, newStatus);
+    }
   };
 
   const handleSave = async () => {
@@ -161,6 +176,11 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setSaveCount(prev => newStatus ? prev + 1 : prev - 1);
 
     await videoService.toggleSaveVideo(video.id, currentUserId, isSaved);
+    
+    // Notify parent component of save change
+    if (onSaveChange) {
+      onSaveChange(video.id, newStatus);
+    }
   };
 
   const handleAddComment = async (text: string) => {
