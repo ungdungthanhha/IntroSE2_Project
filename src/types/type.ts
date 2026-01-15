@@ -108,3 +108,18 @@ export interface Report {
   timestamp: number;
   status: 'pending' | 'reviewed' | 'dismissed';
 }
+
+export interface CommentReport {
+  id: string;
+  commentId: string;          // ID of the reported comment
+  videoId: string;            // ID of the video containing comment
+  reportedBy: string;         // User ID who reported
+  reporterName: string;       // Username for display
+  commentText: string;        // Comment content (stored for admin review if comment deleted)
+  commentOwnerUid: string;    // User ID of comment author
+  commentOwnerName: string;   // Username of comment author
+  reason: ReportReason;
+  additionalInfo?: string;    // Optional additional details
+  timestamp: number;
+  status: 'pending' | 'reviewed' | 'dismissed';
+}

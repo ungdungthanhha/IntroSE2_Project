@@ -165,3 +165,113 @@ export const updateReportStatus = async (reportId: string, newStatus: 'resolved'
     throw error;
   }
 };
+
+// ==========================================
+// 4. QUẢN LÝ BÁO CÁO BÌNH LUẬN (COMMENT REPORTS)
+// ==========================================
+
+import type { CommentReport } from "../types/types";
+
+// Comment Report đầy đủ thông tin (gồm cả data Video và User để hiển thị)
+export type CommentReportPopulated = CommentReport & {
+  videoData?: Video;
+  reporterData?: User;
+  commentOwnerData?: User;
+};
+
+export const getCommentReportsFull = async (): Promise<CommentReportPopulated[]> => {
+  try {
+    const reportColName = COLLECTIONS.COMMENT_REPORTS || "comment_reports";
+    const reportSnap = await getDocs(collection(db, reportColName));
+
+    const rawReports = reportSnap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        reportedBy: data.reportedBy || '',
+        createdAt: data.createdAt || data.timestamp || 0,
+        timestamp: data.timestamp || data.createdAt || 0,
+      } as CommentReport;
+    });
+
+    // Sắp xếp báo cáo mới nhất lên đầu
+    rawReports.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    // Kỹ thuật Populate: Lấy thêm thông tin Video và User
+    const populatedReports = await Promise.all(
+      rawReports.map(async (report) => {
+        let videoData: Video | undefined;
+        let reporterData: User | undefined;
+        let commentOwnerData: User | undefined;
+
+        // 1. Lấy info Video chứa comment
+        try {
+          const videoSnap = await getDoc(doc(db, COLLECTIONS.VIDEOS, report.videoId));
+          if (videoSnap.exists()) {
+            videoData = { id: videoSnap.id, ...videoSnap.data() } as Video;
+          }
+        } catch (e) { console.warn(`Video lỗi hoặc đã bị xóa: ${report.videoId}`); }
+
+        // 2. Lấy info Người báo cáo
+        if (report.reportedBy) {
+          try {
+            const userSnap = await getDoc(doc(db, COLLECTIONS.USERS, report.reportedBy));
+            if (userSnap.exists()) {
+              reporterData = { uid: userSnap.id, ...userSnap.data() } as User;
+            }
+          } catch (e) { console.warn(`User báo cáo không tồn tại: ${report.reportedBy}`); }
+        }
+
+        // 3. Lấy info Người viết comment
+        if (report.commentOwnerUid) {
+          try {
+            const ownerSnap = await getDoc(doc(db, COLLECTIONS.USERS, report.commentOwnerUid));
+            if (ownerSnap.exists()) {
+              commentOwnerData = { uid: ownerSnap.id, ...ownerSnap.data() } as User;
+            }
+          } catch (e) { console.warn(`Người viết comment không tồn tại: ${report.commentOwnerUid}`); }
+        }
+
+        return {
+          ...report,
+          videoData,
+          reporterData,
+          commentOwnerData
+        };
+      })
+    );
+
+    return populatedReports;
+  } catch (error) {
+    console.error("Lỗi lấy Comment Reports:", error);
+    return [];
+  }
+};
+
+// Cập nhật trạng thái báo cáo comment
+export const updateCommentReportStatus = async (reportId: string, newStatus: 'resolved' | 'rejected'): Promise<void> => {
+  try {
+    const reportColName = COLLECTIONS.COMMENT_REPORTS || "comment_reports";
+    const reportRef = doc(db, reportColName, reportId);
+    await updateDoc(reportRef, {
+      status: newStatus
+    });
+  } catch (error) {
+    console.error("Lỗi update comment report:", error);
+    throw error;
+  }
+};
+
+// Xóa comment vi phạm (sẽ cần thêm subcollection logic nếu comments nằm trong video)
+export const deleteComment = async (videoId: string, commentId: string): Promise<void> => {
+  try {
+    // Comments thường nằm trong subcollection videos/{videoId}/comments/{commentId}
+    const commentRef = doc(db, COLLECTIONS.VIDEOS, videoId, 'comments', commentId);
+    await deleteDoc(commentRef);
+    console.log(`Đã xóa comment: ${commentId} trong video: ${videoId}`);
+  } catch (error) {
+    console.error("Lỗi xóa comment:", error);
+    throw error;
+  }
+};
