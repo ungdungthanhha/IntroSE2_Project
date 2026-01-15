@@ -519,7 +519,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
               resizeMode="cover"
             />
             <View style={styles.playCountBadge}>
-              <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
+              <Text style={styles.playCountText}>▷ {(video.viewCount || 0).toLocaleString()}</Text>
             </View>
           </TouchableOpacity>
         )}

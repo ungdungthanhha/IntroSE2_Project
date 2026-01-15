@@ -507,3 +507,17 @@ export const toggleLikeComment = async (videoId: string, commentId: string, user
     return { success: false, error: error.message };
   }
 };
+
+/**
+ * 12. Track Video View - Increment viewCount
+ */
+export const trackVideoView = async (videoId: string): Promise<void> => {
+  try {
+    const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
+    await videoRef.update({
+      viewCount: firestore.FieldValue.increment(1)
+    });
+  } catch (error) {
+    console.error('Error tracking video view:', error);
+  }
+};

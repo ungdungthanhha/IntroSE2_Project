@@ -123,6 +123,13 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     }
   }, [isActive]);
 
+  // TRACK VIDEO VIEW
+  useEffect(() => {
+    if (isActive) {
+      videoService.trackVideoView(video.id);
+    }
+  }, [isActive, video.id]);
+
   // HANDLE KEYBOARD EVENTS FOR REPORT MODAL
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -385,6 +392,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             <Music size={14} color="#fff" />
             <Text style={styles.musicText}>{video.ownerName}</Text>
           </View>
+          <Text style={styles.viewCount}>{(video.viewCount || 0).toLocaleString()} views</Text>
         </View>
 
         {/* THANH TIẾN TRÌNH (Sát đáy) */}
@@ -593,6 +601,7 @@ const styles = StyleSheet.create({
   hashtag: { fontWeight: 'bold' },
   musicRow: { flexDirection: 'row', alignItems: 'center' },
   musicText: { color: '#fff', marginLeft: 8 },
+  viewCount: { color: '#fff', fontSize: 12, marginTop: 4, opacity: 0.8 },
 
   // Progress Bar
   progressBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.3)' },

@@ -24,6 +24,7 @@ export interface Video {
   likesCount: number;
   commentsCount: number;
   savesCount: number;
+  viewCount: number;
   createdAt: number;
   isLiked?: boolean;
   isSaved?: boolean;
