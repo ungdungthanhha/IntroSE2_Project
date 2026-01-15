@@ -175,7 +175,10 @@ const AppContent = () => {
     setIsRefreshing(false);
   };
 
-  useEffect(() => { fetchVideos(); }, []);
+  // Fetch videos on mount and when currentUser changes
+  useEffect(() => {
+    fetchVideos();
+  }, [currentUser?.uid]);
 
   // Fetch My Videos
   useEffect(() => {
