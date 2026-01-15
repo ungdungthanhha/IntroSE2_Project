@@ -24,6 +24,7 @@ export interface Video {
   commentsCount: number;
   savesCount: number;
   timestamp: number;
+  createdAt?: number;   // Mobile app dùng createdAt thay vì timestamp
   isLiked?: boolean;
   isSaved?: boolean;
 }

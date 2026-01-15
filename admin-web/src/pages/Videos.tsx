@@ -14,7 +14,7 @@ const Dashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     const data = await getVideos();
-    const sortedData = data.sort((a, b) => b.timestamp - a.timestamp);
+    const sortedData = data.sort((a, b) => (b.createdAt || b.timestamp || 0) - (a.createdAt || a.timestamp || 0));
     setVideos(sortedData);
     setLoading(false);
   };
@@ -33,7 +33,7 @@ const Dashboard: React.FC = () => {
   };
 
   // Hàm format ngày tháng
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp: number | undefined) => {
     if (!timestamp) return "N/A";
     return new Date(timestamp).toLocaleDateString('vi-VN', {
       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -141,7 +141,7 @@ const Dashboard: React.FC = () => {
                   </td>
 
                   {/* Cột 5: Time */}
-                  <td style={{ padding: '16px', fontSize: '13px', color: '#666' }}>{formatDate(v.timestamp)}</td>
+                  <td style={{ padding: '16px', fontSize: '13px', color: '#666' }}>{formatDate(v.createdAt || v.timestamp)}</td>
 
                   {/* Cột 6: Action */}
                   <td style={{ padding: '16px' }}>
