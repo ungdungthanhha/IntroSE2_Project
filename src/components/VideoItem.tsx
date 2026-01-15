@@ -2,12 +2,11 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState,
+  Alert, Keyboard, KeyboardEvent, ActivityIndicator
 } from 'react-native';
 import Video from 'react-native-video';
 import SoundPlayer from 'react-native-sound';
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent, ActivityIndicator
-} from 'react-native';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play, Flag } from 'lucide-react-native';
 import { Video as VideoType, User, ReportReason } from '../types/type';
 import * as videoService from '../services/videoService';
@@ -106,6 +105,93 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     }
   };
 
+  // 2. LOGIC ĐĨA NHẠC XOAY (MOVED DOWN) - 5. LOGIC PHÁT NHẠC NỀN
+  useEffect(() => {
+    // 5. LOGIC PHÁT NHẠC NỀN
+    // Clean up function to release sound resource
+    const cleanupSound = () => {
+      if (soundRef.current) {
+        try {
+          soundRef.current.stop();
+          soundRef.current.release();
+        } catch (error) {
+          console.log('Error releasing sound:', error);
+        }
+        soundRef.current = null;
+      }
+    };
+
+    // If no custom sound or shouldn't load, cleanup
+    if (!video.soundAudioUrl || !shouldLoad) {
+      cleanupSound();
+      return;
+    }
+
+    // Initialize sound if not exists
+    if (!soundRef.current && isActive) {
+      if (typeof SoundPlayer !== 'undefined') {
+        try {
+          // @ts-ignore
+          const sound = new SoundPlayer(video.soundAudioUrl, null, (error) => {
+            if (error) {
+              console.log('failed to load the sound', error);
+              return;
+            }
+
+            // Loaded successfully
+            sound.setNumberOfLoops(-1); // Infinite loop
+
+            // Check if still mounted and active before playing
+            if (isMounted.current && isActive && !isPaused) {
+              sound.play((success) => {
+                if (!success) {
+                  console.log('playback failed due to audio decoding errors');
+                }
+              });
+            }
+          });
+          soundRef.current = sound;
+        } catch (e) {
+          console.error("Failed to initialize SoundPlayer", e);
+        }
+      }
+    } else if (soundRef.current) {
+      // Control existing sound instance
+      try {
+        if (isActive && !isPaused) {
+          soundRef.current.play();
+        } else {
+          soundRef.current.pause();
+        }
+      } catch (e) {
+        console.error("Error controlling sound", e);
+      }
+    }
+
+    return () => {
+      // We don't release here immediately on every dependency change to avoid reloading
+      // But we strictly control play/pause
+      if (!isActive && soundRef.current) {
+        try {
+          soundRef.current.pause();
+        } catch (e) {
+          console.log("Error pausing sound", e);
+        }
+      }
+    };
+  }, [video.soundAudioUrl, isActive, isPaused, shouldLoad]);
+
+  // Clean up on unmount or video change
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.stop();
+        soundRef.current.release();
+        soundRef.current = null;
+      }
+    };
+  }, [video.id]);
+
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -173,7 +259,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setLikeCount(prev => newStatus ? prev + 1 : prev - 1); // Optimistic update
 
     await videoService.toggleLikeVideo(video.id, currentUserId, !newStatus);
-    
+
     // Notify parent component of like change
     if (onLikeChange) {
       onLikeChange(video.id, newStatus);
@@ -187,7 +273,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setSaveCount(prev => newStatus ? prev + 1 : prev - 1);
 
     await videoService.toggleSaveVideo(video.id, currentUserId, isSaved);
-    
+
     // Notify parent component of save change
     if (onSaveChange) {
       onSaveChange(video.id, newStatus);
@@ -196,7 +282,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
   const handleAddComment = async (text: string) => {
     if (!currentUserId || !text.trim()) return;
-    
+
     const result = await videoService.addComment(
       video.id,
       currentUserId,
@@ -218,10 +304,10 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setComments(comments.map(c =>
       c.id === commentId
         ? {
-            ...c,
-            likesCount: (c.likesCount || 0) + (isLiked ? -1 : 1),
-            isLiked: !isLiked
-          }
+          ...c,
+          likesCount: (c.likesCount || 0) + (isLiked ? -1 : 1),
+          isLiked: !isLiked
+        }
         : c
     ));
 
