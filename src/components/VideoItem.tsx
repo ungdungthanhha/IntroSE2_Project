@@ -87,13 +87,13 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
       if (showCommentReportModal && commentReportReason === ReportReason.OTHER) {
         setTimeout(() => {
           commentReportScrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        }, 50);
       }
       // Auto scroll video report modal when keyboard appears
       if (showReportModal && selectedReason === ReportReason.OTHER) {
         setTimeout(() => {
           reportScrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        }, 50);
       }
     });
 
@@ -394,7 +394,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
                   onFocus={() => {
                     setTimeout(() => {
                       reportScrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 300);
+                    }, 100);
                   }}
                 />
               </View>
@@ -548,7 +548,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
                   onFocus={() => {
                     setTimeout(() => {
                       commentReportScrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 300);
+                    }, 100);
                   }}
                 />
               </View>
