@@ -258,7 +258,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </TouchableOpacity>
 
           <Animated.View style={[styles.discContainer, { transform: [{ rotate: spin }] }]}>
-            <Image source={{ uri: video.ownerAvatar }} style={styles.discImg} />
+            <Image source={{ uri: video.soundThumb ? video.soundThumb : video.ownerAvatar }} style={styles.discImg} />
           </Animated.View>
         </View>
 
@@ -270,7 +270,9 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </Text>
           <View style={styles.musicRow}>
             <Music size={14} color="#fff" />
-            <Text style={styles.musicText}>{video.ownerName}</Text>
+            <Text style={styles.musicText} numberOfLines={1}>
+              {video.soundName ? video.soundName : `Original sound - ${video.ownerName}`}
+            </Text>
           </View>
         </View>
 
