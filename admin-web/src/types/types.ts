@@ -88,3 +88,19 @@ export interface Report {
   timestamp?: number;       // Mobile app dùng timestamp
   createdAt?: number;       // Admin-web dùng createdAt (fallback)
 }
+
+export interface CommentReport {
+  id: string;
+  commentId: string;          // ID của comment bị report
+  videoId: string;            // ID video chứa comment
+  reportedBy: string;         // User ID người report
+  reporterName?: string;      // Username để hiển thị
+  commentText: string;        // Nội dung comment (lưu để admin review khi comment bị xóa)
+  commentOwnerUid: string;    // User ID của người viết comment
+  commentOwnerName: string;   // Username của người viết comment
+  reason: string;
+  additionalInfo?: string;    // Chi tiết thêm (nếu chọn "other")
+  timestamp?: number;
+  createdAt?: number;
+  status: 'pending' | 'resolved' | 'rejected' | 'reviewed' | 'dismissed';
+}

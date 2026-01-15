@@ -21,4 +21,5 @@ export const COLLECTIONS = {
   CHATS: 'chats',
   LIVESTREAMS: 'livestreams',
   REPORTS: 'reports', // Web Admin tự thêm bảng này
+  COMMENT_REPORTS: 'comment_reports',
 };

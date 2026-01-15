@@ -26,6 +26,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const reportScrollViewRef = useRef<ScrollView>(null);
+  const commentReportScrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     isMounted.current = true;
@@ -42,13 +43,18 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([
-    { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
-    { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
+    { id: '1', user: 'alex_j', userUid: 'user1', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
+    { id: '2', user: 'chef_master', userUid: 'user2', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
   ]);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
   const [reportDetails, setReportDetails] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Comment Report State
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<{ id: string; user: string; userUid: string; text: string } | null>(null);
+  const [commentReportReason, setCommentReportReason] = useState<ReportReason | null>(null);
+  const [commentReportDetails, setCommentReportDetails] = useState('');
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -77,6 +83,18 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
     const keyboardShowListener = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
       setKeyboardHeight(e.endCoordinates.height);
+      // Auto scroll comment report modal when keyboard appears
+      if (showCommentReportModal && commentReportReason === ReportReason.OTHER) {
+        setTimeout(() => {
+          commentReportScrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+      // Auto scroll video report modal when keyboard appears
+      if (showReportModal && selectedReason === ReportReason.OTHER) {
+        setTimeout(() => {
+          reportScrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     });
 
     const keyboardHideListener = Keyboard.addListener(hideEvent, () => {
@@ -142,6 +160,41 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     } else {
       Alert.alert('Error', result.error || 'Failed to submit report');
     }
+  };
+
+  // Handle Comment Report
+  const handleCommentReportSubmit = async () => {
+    if (!currentUserId || !commentReportReason || !selectedComment) {
+      Alert.alert('Lỗi', 'Vui lòng chọn lý do báo cáo');
+      return;
+    }
+
+    const result = await reportService.submitCommentReport(
+      selectedComment.id,
+      video.id,
+      currentUserId,
+      video.ownerName, // Reporter name
+      selectedComment.text,
+      selectedComment.userUid,
+      selectedComment.user,
+      commentReportReason,
+      commentReportDetails
+    );
+
+    if (result.success) {
+      Alert.alert('Thành công', 'Báo cáo đã được gửi. Cảm ơn bạn đã giúp cộng đồng an toàn hơn.');
+      setShowCommentReportModal(false);
+      setSelectedComment(null);
+      setCommentReportReason(null);
+      setCommentReportDetails('');
+    } else {
+      Alert.alert('Lỗi', result.error || 'Không thể gửi báo cáo');
+    }
+  };
+
+  const openCommentReportModal = (comment: { id: string; user: string; userUid: string; text: string }) => {
+    setSelectedComment(comment);
+    setShowCommentReportModal(true);
   };
 
   const reportReasons = [
@@ -394,9 +447,14 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
                     <Text style={styles.commentReply}>Reply</Text>
                   </View>
                 </View>
-                <View style={{ alignItems: 'center' }}>
-                  <Heart size={16} color="#ccc" />
-                  <Text style={{ fontSize: 10, color: '#888' }}>{c.likes}</Text>
+                <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
+                  <TouchableOpacity onPress={() => openCommentReportModal(c)}>
+                    <Flag size={14} color="#999" />
+                  </TouchableOpacity>
+                  <View style={{ alignItems: 'center' }}>
+                    <Heart size={16} color="#ccc" />
+                    <Text style={{ fontSize: 10, color: '#888' }}>{c.likes}</Text>
+                  </View>
                 </View>
               </View>
             ))}
@@ -412,7 +470,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
               />
               <TouchableOpacity onPress={() => {
                 if (commentText.trim()) {
-                  setComments([...comments, { id: Date.now().toString(), user: 'you', text: commentText, likes: 0 }]);
+                  setComments([...comments, { id: Date.now().toString(), user: 'you', userUid: currentUserId || 'unknown', text: commentText, likes: 0 }]);
                   setCommentText('');
                 }
               }}>
@@ -420,6 +478,106 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      )}
+
+      {/* COMMENT REPORT MODAL */}
+      {showCommentReportModal && (
+        <View style={styles.reportModal}>
+          <View style={styles.reportHeader}>
+            <Text style={styles.reportTitle}>Báo cáo bình luận</Text>
+            <TouchableOpacity onPress={() => {
+              setShowCommentReportModal(false);
+              setSelectedComment(null);
+              setCommentReportReason(null);
+              setCommentReportDetails('');
+            }}>
+              <X size={24} color="#000" />
+            </TouchableOpacity>
+          </View>
+
+          {selectedComment && (
+            <View style={styles.reportedCommentPreview}>
+              <Text style={styles.reportedCommentUser}>@{selectedComment.user}</Text>
+              <Text style={styles.reportedCommentText} numberOfLines={2}>"{selectedComment.text}"</Text>
+            </View>
+          )}
+
+          <ScrollView
+            ref={commentReportScrollViewRef}
+            style={styles.reportContent}
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 20 }}
+          >
+            <Text style={styles.reportSubtitle}>Tại sao bạn báo cáo bình luận này?</Text>
+
+            {reportReasons.map((reason) => (
+              <TouchableOpacity
+                key={reason.value}
+                style={[
+                  styles.reportReasonItem,
+                  commentReportReason === reason.value && styles.reportReasonSelected
+                ]}
+                onPress={() => setCommentReportReason(reason.value)}
+              >
+                <View style={[
+                  styles.radioButton,
+                  commentReportReason === reason.value && styles.radioButtonSelected
+                ]}>
+                  {commentReportReason === reason.value && (
+                    <View style={styles.radioButtonInner} />
+                  )}
+                </View>
+                <Text style={styles.reportReasonText}>{reason.label}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {commentReportReason === ReportReason.OTHER && (
+              <View style={styles.reportDetailsContainer}>
+                <Text style={styles.reportDetailsLabel}>Vui lòng cung cấp thêm chi tiết:</Text>
+                <TextInput
+                  style={styles.reportDetailsInput}
+                  placeholder="Mô tả vấn đề..."
+                  value={commentReportDetails}
+                  onChangeText={setCommentReportDetails}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      commentReportScrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 300);
+                  }}
+                />
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.reportActions}>
+            <TouchableOpacity
+              style={styles.reportCancelButton}
+              onPress={() => {
+                setShowCommentReportModal(false);
+                setSelectedComment(null);
+                setCommentReportReason(null);
+                setCommentReportDetails('');
+              }}
+            >
+              <Text style={styles.reportCancelText}>Hủy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.reportSubmitButton,
+                !commentReportReason && styles.reportSubmitButtonDisabled
+              ]}
+              onPress={handleCommentReportSubmit}
+              disabled={!commentReportReason}
+            >
+              <Text style={styles.reportSubmitText}>Gửi báo cáo</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -495,4 +653,8 @@ const styles = StyleSheet.create({
   reportSubmitButton: { flex: 1, paddingVertical: 14, borderRadius: 8, backgroundColor: '#fe2c55', alignItems: 'center' },
   reportSubmitButtonDisabled: { backgroundColor: '#ccc' },
   reportSubmitText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  // Comment Report Preview
+  reportedCommentPreview: { backgroundColor: '#f8f8f8', padding: 12, marginHorizontal: 16, marginTop: 8, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#fe2c55' },
+  reportedCommentUser: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 },
+  reportedCommentText: { fontSize: 13, color: '#666', fontStyle: 'italic' },
 });
