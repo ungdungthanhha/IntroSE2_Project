@@ -28,6 +28,24 @@ export interface Video {
   isLiked?: boolean;
   isSaved?: boolean;
   thumbUrl?: string;
+  // Thông tin Sound gắn kèm
+  soundId: string;
+  soundName: string;
+  soundThumb: string;
+}
+
+export interface Sound {
+  id: string;
+  name: string;             // Tên hiển thị
+  ownerUid: string;         // 'apple_music' hoặc uid của user
+  ownerName: string;        // Tên ca sĩ hoặc username
+  ownerAvatar: string;      
+  audioUrl: string;         // Link mp3/preview
+  thumbnailUrl: string;
+  usageCount: number;       
+  createdAt: number;
+  isSystemSound?: boolean;  // True nếu là nhạc iTunes
+  originalVideoId?: string; // Nếu là Original Sound, lưu ID video gốc
 }
 
 export interface Comment {
