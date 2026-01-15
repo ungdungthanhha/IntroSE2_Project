@@ -160,7 +160,7 @@ const AppContent = () => {
   const fetchVideos = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     try {
-      const allVideos = await videoService.getAllVideos();
+      const allVideos = await videoService.getAllVideos(currentUser?.uid);
       if (allVideos.length > 0) {
         setVideos(allVideos);
       } else { setVideos(MOCK_VIDEOS); }
@@ -176,11 +176,10 @@ const AppContent = () => {
     setIsRefreshing(false);
   };
 
-  useEffect(() => {
-    if (currentUser) {
-      fetchVideos();
-    }
-  }, [currentUser]);
+  // Fetch videos on mount and when currentUser changes
+  useEffect(() => { 
+    fetchVideos(); 
+  }, [currentUser?.uid]);
 
   // Fetch My Videos
   useEffect(() => {
@@ -321,6 +320,8 @@ const AppContent = () => {
                                 pushScreen('profile');
                               }}
                               currentUserId={currentUser?.uid} // Pass currentUserId
+                              onLikeChange={() => fetchVideos(false)} // Refresh videos when user likes
+                              onSaveChange={() => fetchVideos(false)} // Refresh videos when user saves
                             />
                           )}
                           snapToInterval={ACTUAL_VIDEO_HEIGHT}
@@ -415,6 +416,12 @@ const AppContent = () => {
                 }}
                 userVideos={otherVideos}
                 onSelectVideo={handleSelectSearchedVideo}
+                onUserUpdate={(updatedProfile) => {
+                  setViewingProfile(updatedProfile);
+                }}
+                onCurrentUserUpdate={(updatedCurrentUser) => {
+                  setCurrentUser(updatedCurrentUser);
+                }}
               />
             </View>
           )}
@@ -432,6 +439,8 @@ const AppContent = () => {
                   pushScreen('profile');
                 }}
                 currentUserId={currentUser?.uid}
+                onLikeChange={() => fetchVideos(false)} // Refresh videos when user likes
+                onSaveChange={() => fetchVideos(false)} // Refresh videos when user saves
               />
               <TouchableOpacity
                 style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 9991, padding: 8 }}

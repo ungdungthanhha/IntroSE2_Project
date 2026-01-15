@@ -24,6 +24,7 @@ export interface Video {
   commentsCount: number;
   savesCount: number;
   timestamp: number;
+  createdAt?: number;   // Mobile app dùng createdAt thay vì timestamp
   isLiked?: boolean;
   isSaved?: boolean;
 }
@@ -43,7 +44,7 @@ export interface Message {
   chatId: string;
   senderId: string;
   text: string;
-  timestamp:  number;
+  timestamp: number;
 }
 
 export interface Chat {
@@ -79,8 +80,12 @@ export interface LiveComment {
 export interface Report {
   id: string;
   videoId: string;
-  reason: string;        // Lý do báo cáo (VD: Bạo lực, Nhạy cảm)
-  reportedByUid: string; // ID người báo cáo
-  status: 'pending' | 'resolved' | 'rejected'; // Trạng thái xử lý
-  createdAt: number;
+  reason: string;           // Lý do báo cáo (spam, inappropriate, harassment, violence, false_info, other)
+  additionalInfo?: string;  // Chi tiết thêm (nếu chọn "other")
+  reportedBy: string;       // User ID người báo cáo (mobile dùng tên này)
+  reportedByUid?: string;   // Alias cho reportedBy (backwards compatibility)
+  reporterName?: string;    // Tên người báo cáo
+  status: 'pending' | 'resolved' | 'rejected' | 'reviewed' | 'dismissed'; // Trạng thái xử lý
+  timestamp?: number;       // Mobile app dùng timestamp
+  createdAt?: number;       // Admin-web dùng createdAt (fallback)
 }

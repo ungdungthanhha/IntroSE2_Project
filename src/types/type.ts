@@ -9,7 +9,7 @@ export interface User {
   avatarUrl: string;
   bio: string;
   followersCount: number;
-  followingCount: number;
+  rfollowingCount: number;
   instagramHandle?: string;
   youtubeHandle?: string;
 }
@@ -24,6 +24,7 @@ export interface Video {
   likesCount: number;
   commentsCount: number;
   savesCount: number;
+  viewCount: number;
   createdAt: number;
   isLiked?: boolean;
   isSaved?: boolean;
@@ -57,6 +58,8 @@ export interface Comment {
   avatarUrl: string;
   text: string;
   timestamp: number;
+  likesCount?: number;
+  isLiked?: boolean;
 }
 
 export interface Message {
@@ -106,4 +109,24 @@ export enum AppTab {
   INBOX = 'inbox',
   PROFILE = 'profile',
   LIVE = 'live'
+}
+
+export enum ReportReason {
+  SPAM = 'spam',
+  INAPPROPRIATE = 'inappropriate',
+  HARASSMENT = 'harassment',
+  VIOLENCE = 'violence',
+  FALSE_INFO = 'false_info',
+  OTHER = 'other'
+}
+
+export interface Report {
+  id: string;
+  videoId: string;
+  reportedBy: string;        // User ID who reported
+  reporterName: string;       // Username for display
+  reason: ReportReason;
+  additionalInfo?: string;    // Optional additional details
+  timestamp: number;
+  status: 'pending' | 'reviewed' | 'dismissed';
 }
