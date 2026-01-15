@@ -92,6 +92,7 @@ const AppContent = () => {
         return true;
       }
     } catch (e: any) {
+      console.error('ensureUserDoc Error:', e);
       Alert.alert("Database Error", e.message);
       return false;
     } finally {

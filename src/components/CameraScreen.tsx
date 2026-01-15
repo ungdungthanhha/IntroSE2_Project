@@ -3,7 +3,9 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
   StatusBar, Animated, Easing, Platform, PermissionsAndroid,
   Alert,
-  Linking
+  Linking,
+  AppState,
+  ActivityIndicator, Button
 } from 'react-native';
 import {
   X, Wand2, Image as ImageIcon, RotateCcw, Zap, Timer, Music, Settings
@@ -11,25 +13,35 @@ import {
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import Svg, { Circle } from 'react-native-svg';
 import * as videoService from '../services/videoService'; // Import service của bạn
+import { Sound } from '../types/type';
+import Video, { VideoRef } from 'react-native-video';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface CameraScreenProps {
   onClose: () => void;
   onVideoRecorded: (path: string) => void;
+  selectedSound?: Sound;
+  onOpenMusicPicker: () => void;
+  onRemoveSound?: () => void;
 }
 
-const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded }) => {
+const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded, selectedSound, onOpenMusicPicker, onRemoveSound }) => {
   const [cameraPosition, setCameraPosition] = useState<'front' | 'back'>('front');
   const device = useCameraDevice(cameraPosition);
   const cameraRef = useRef<Camera>(null);
+  const audioPlayerRef = useRef<any>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
   const [hasCamPermission, setHasCamPermission] = useState(false);
   const [hasMicPermission, setHasMicPermission] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+
+  const [isAppForeground, setIsAppForeground] = useState(true);
 
   const [duration, setDuration] = useState<15 | 60>(60);
+
 
   // Animation
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -68,8 +80,8 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
             micStatus === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
           )) {
             Alert.alert(
-              "Cần cấp quyền",
-              "Bạn đã chặn quyền Camera hoặc Micro. Vui lòng vào Cài đặt để bật lại thủ công.",
+              "Need Permissions",
+              "You have blocked camera or microphone permissions. Please enable them in settings to use the camera.",
               [
                 { text: "Hủy", style: "cancel" },
                 { text: "Mở Cài đặt", onPress: () => Linking.openSettings() }
@@ -82,6 +94,9 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
       } catch (err) {
         console.warn(err);
         return false;
+      } finally {
+        // Check xong -> tắt loading
+        setIsChecking(false);
       }
     } else {
       // Logic cho iOS (Dùng hàm static của Vision Camera)
@@ -96,12 +111,21 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
         Linking.openSettings(); // iOS chỉ có 1 lần hỏi, lần sau phải vào setting
       }
       return isGranted;
+      setIsChecking(false);
     }
   };
 
   // --- LOGIC QUYỀN (GIỮ NGUYÊN) ---
   useEffect(() => {
-    requestFullPermissions(false); // False: không hiện Alert Setting nếu bị chặn ngay lúc đầu
+    requestFullPermissions(false);
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      // Nếu app active -> set true. Nếu background/inactive -> set false
+      setIsAppForeground(nextAppState === 'active');
+    });
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   // --- LOGIC CHUYỂN CAMERA ---
@@ -187,6 +211,24 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
     outputRange: [circumference, 0],
   });
 
+  if (isChecking) {
+    return (
+      <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="white" />
+      </View>
+    );
+  }
+
+  // 2. Nếu check xong mà KHÔNG có quyền -> Hiện View báo lỗi/yêu cầu quyền
+  if (!hasCamPermission || !hasMicPermission) {
+    return (
+      <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
+        {/* Nút này để người dùng bấm gọi lại hàm xin quyền nếu lỡ từ chối */}
+        <Button title="Cấp quyền Camera" onPress={() => requestFullPermissions(true)} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -196,9 +238,34 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
           key={cameraPosition} // Để reset camera khi đổi trước/sau
           style={StyleSheet.absoluteFill}
           device={device}
-          isActive={true}
+          isActive={isAppForeground}
           video={true}
-          audio={true}
+          audio={!selectedSound}
+        />
+      )}
+
+      {selectedSound && (
+        <Video
+          ref={audioPlayerRef}
+          source={{ uri: selectedSound.audioUrl }}
+          // Logic đồng bộ: Chỉ phát khi đang quay
+          paused={!isRecording}
+
+          // Cấu hình để chạy ẩn
+          // audioOnly={true}
+          playInBackground={false}
+          playWhenInactive={false}
+          ignoreSilentSwitch={"ignore"} // Luôn phát kể cả khi điện thoại để im lặng
+          repeat={true}
+          volume={1.0}
+
+          // Style ẩn đi (không hiển thị hình ảnh, chỉ lấy tiếng)
+          style={{ width: 0, height: 0, position: 'absolute' }}
+
+          // Khi quay xong hoặc huỷ, tua lại từ đầu (tuỳ chọn logic)
+          onLoad={() => {
+            audioPlayerRef.current?.seek(0);
+          }}
         />
       )}
 
@@ -209,10 +276,23 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ onClose, onVideoRecorded })
             <X size={28} color="#fff" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.soundButton}>
-            <Music size={14} color="#fff" />
-            <Text style={styles.soundText}>Sounds</Text>
-          </TouchableOpacity>
+          <View style={styles.soundButtonContainer}>
+            <TouchableOpacity
+              style={styles.soundButton}
+              onPress={onOpenMusicPicker}
+            >
+              <Music size={14} color="#fff" />
+              <Text style={styles.soundText} numberOfLines={1}>
+                {selectedSound ? selectedSound.name : "Add Sound"}
+              </Text>
+            </TouchableOpacity>
+
+            {selectedSound && onRemoveSound && (
+              <TouchableOpacity style={styles.removeSoundBtn} onPress={onRemoveSound}>
+                <X size={12} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={{ width: 28 }} />
         </View>
 
@@ -289,8 +369,10 @@ const styles = StyleSheet.create({
   overlayContainer: { flex: 1, justifyContent: 'space-between' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? 40 : 10 },
   iconButton: { padding: 8 },
-  soundButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 6 },
-  soundText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  soundButtonContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, paddingHorizontal: 8, gap: 4 },
+  soundButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 6, gap: 6 },
+  removeSoundBtn: { padding: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
+  soundText: { color: '#fff', fontSize: 13, fontWeight: '600', maxWidth: 120 },
   bodyContainer: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 20 },
   rightSidebar: { alignItems: 'center', gap: 20 },
   sidebarItem: { alignItems: 'center', gap: 4 },

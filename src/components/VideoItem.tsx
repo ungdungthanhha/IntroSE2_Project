@@ -2,9 +2,12 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent, ActivityIndicator
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState
 } from 'react-native';
 import Video from 'react-native-video';
+import SoundPlayer from 'react-native-sound';
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent, ActivityIndicator
+} from 'react-native';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play, Flag } from 'lucide-react-native';
 import { Video as VideoType, User, ReportReason } from '../types/type';
 import * as videoService from '../services/videoService';
@@ -28,6 +31,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const soundRef = useRef<typeof SoundPlayer.prototype | null>(null);
   const reportScrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -296,6 +300,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           resizeMode="cover"
           repeat={true}
           paused={!isActive || isPaused}
+          muted={!!video.soundAudioUrl} // Mute video gốc nếu có nhạc nền
           playInBackground={false}
           playWhenInactive={false}
           onProgress={handleProgress}
@@ -378,7 +383,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </TouchableOpacity>
 
           <Animated.View style={[styles.discContainer, { transform: [{ rotate: spin }] }]}>
-            <Image source={{ uri: video.ownerAvatar }} style={styles.discImg} />
+            <Image source={{ uri: video.soundThumb ? video.soundThumb : video.ownerAvatar }} style={styles.discImg} />
           </Animated.View>
         </View>
 
@@ -390,7 +395,9 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </Text>
           <View style={styles.musicRow}>
             <Music size={14} color="#fff" />
-            <Text style={styles.musicText}>{video.ownerName}</Text>
+            <Text style={styles.musicText} numberOfLines={1}>
+              {video.soundName ? video.soundName : `Original sound - ${video.ownerName}`}
+            </Text>
           </View>
           <Text style={styles.viewCount}>{(video.viewCount || 0).toLocaleString()} views</Text>
         </View>
