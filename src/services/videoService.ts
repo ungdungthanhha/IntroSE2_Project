@@ -418,3 +418,75 @@ export const pickVideoFromGallery = async (): Promise<{ uri: string; duration: n
     return null;
   }
 };
+
+/**
+ * Lấy tất cả comments của một video
+ */
+export const getVideoComments = async (videoId: string, userId?: string): Promise<Comment[]> => {
+  try {
+    const commentsSnapshot = await db
+      .collection(COLLECTIONS.VIDEOS)
+      .doc(videoId)
+      .collection('comments')
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    const comments: Comment[] = [];
+
+    for (const doc of commentsSnapshot.docs) {
+      const commentData = doc.data() as Comment;
+      
+      // Check if current user liked this comment
+      if (userId) {
+        const likeDoc = await doc.ref.collection('likes').doc(userId).get();
+        commentData.isLiked = likeDoc.exists();
+      }
+
+      comments.push(commentData);
+    }
+
+    return comments;
+  } catch (error) {
+    console.error('Error getting comments:', error);
+    return [];
+  }
+};
+
+/**
+ * Like/Unlike a comment
+ */
+export const toggleLikeComment = async (videoId: string, commentId: string, userId: string, isLiked: boolean) => {
+  try {
+    const commentRef = db
+      .collection(COLLECTIONS.VIDEOS)
+      .doc(videoId)
+      .collection('comments')
+      .doc(commentId);
+
+    const likeRef = commentRef.collection('likes').doc(userId);
+    const batch = db.batch();
+
+    if (isLiked) {
+      // Unlike - remove the like
+      batch.delete(likeRef);
+      batch.update(commentRef, {
+        likesCount: firestore.FieldValue.increment(-1)
+      });
+    } else {
+      // Like - add the like
+      batch.set(likeRef, {
+        userId,
+        createdAt: new Date().toISOString()
+      });
+      batch.update(commentRef, {
+        likesCount: firestore.FieldValue.increment(1)
+      });
+    }
+
+    await batch.commit();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error toggling comment like:', error);
+    return { success: false, error: error.message };
+  }
+};

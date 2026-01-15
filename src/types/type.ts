@@ -38,6 +38,8 @@ export interface Comment {
   avatarUrl: string;
   text: string;
   timestamp: number;
+  likesCount?: number;
+  isLiked?: boolean;
 }
 
 export interface Message {

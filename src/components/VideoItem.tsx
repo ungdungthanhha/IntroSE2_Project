@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent, ActivityIndicator
 } from 'react-native';
 import Video from 'react-native-video';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play, Flag } from 'lucide-react-native';
 import { Video as VideoType, User, ReportReason } from '../types/type';
 import * as videoService from '../services/videoService';
 import * as reportService from '../services/reportService';
+import * as userService from '../services/userService';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -41,14 +42,56 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [isFollowing, setIsFollowing] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState([
-    { id: '1', user: 'alex_j', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
-    { id: '2', user: 'chef_master', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
-  ]);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
   const [reportDetails, setReportDetails] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [currentUserInfo, setCurrentUserInfo] = useState({ uid: '', username: '', avatarUrl: '' });
+
+  // Fetch current user info on component mount
+  useEffect(() => {
+    const fetchCurrentUserInfo = async () => {
+      if (currentUserId) {
+        try {
+          const userInfo = await userService.getUserById(currentUserId);
+          if (userInfo) {
+            setCurrentUserInfo({
+              uid: userInfo.uid,
+              username: userInfo.displayName || userInfo.username || 'Anonymous',
+              avatarUrl: userInfo.avatarUrl || ''
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching current user info:', error);
+        }
+      }
+    };
+
+    fetchCurrentUserInfo();
+  }, [currentUserId]);
+
+  // Fetch comments when modal opens
+  useEffect(() => {
+    if (showComments) {
+      fetchComments();
+    }
+  }, [showComments]);
+
+  const fetchComments = async () => {
+    setLoadingComments(true);
+    try {
+      const fetchedComments = await videoService.getVideoComments(video.id, currentUserId);
+      setComments(fetchedComments);
+      console.log('Fetched comments:', fetchedComments);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -118,6 +161,50 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setSaveCount(prev => newStatus ? prev + 1 : prev - 1);
 
     await videoService.toggleSaveVideo(video.id, currentUserId, isSaved);
+  };
+
+  const handleAddComment = async (text: string) => {
+    if (!currentUserId || !text.trim()) return;
+    
+    const result = await videoService.addComment(
+      video.id,
+      currentUserId,
+      currentUserInfo.avatarUrl,
+      currentUserInfo.username,
+      text
+    );
+
+    if (result.success && result.comment) {
+      setComments([result.comment, ...comments]);
+      console.log('Comment added:', result.comment);
+    }
+  };
+
+  const handleLikeComment = async (commentId: string, isLiked: boolean) => {
+    if (!currentUserId) return;
+
+    // Optimistic update
+    setComments(comments.map(c =>
+      c.id === commentId
+        ? {
+            ...c,
+            likesCount: (c.likesCount || 0) + (isLiked ? -1 : 1),
+            isLiked: !isLiked
+          }
+        : c
+    ));
+
+    const result = await videoService.toggleLikeComment(
+      video.id,
+      commentId,
+      currentUserId,
+      isLiked
+    );
+
+    if (!result.success) {
+      // Revert on error
+      fetchComments();
+    }
   };
 
   const handleReportSubmit = async () => {
@@ -373,7 +460,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
         </View>
       )}
 
-      {/* MODAL COMMENT GIẢ LẬP */}
+      {/* MODAL COMMENT */}
       {showComments && (
         <View style={styles.commentModal}>
           <View style={styles.commentHeader}>
@@ -383,23 +470,55 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.commentList}>
-            {comments.map((c) => (
-              <View key={c.id} style={styles.commentItem}>
-                <View style={styles.commentAvatar} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.commentUser}>{c.user}</Text>
-                  <Text style={styles.commentContent}>{c.text}</Text>
-                  <View style={styles.commentMeta}>
-                    <Text style={styles.commentTime}>2h ago</Text>
-                    <Text style={styles.commentReply}>Reply</Text>
-                  </View>
-                </View>
-                <View style={{ alignItems: 'center' }}>
-                  <Heart size={16} color="#ccc" />
-                  <Text style={{ fontSize: 10, color: '#888' }}>{c.likes}</Text>
-                </View>
+            {loadingComments ? (
+              <View style={{ alignItems: 'center', marginTop: 20 }}>
+                <ActivityIndicator size="large" color="#fe2c55" />
               </View>
-            ))}
+            ) : comments.length === 0 ? (
+              <View style={{ alignItems: 'center', marginTop: 20 }}>
+                <Text style={{ color: '#888' }}>No comments yet</Text>
+              </View>
+            ) : (
+              comments.map((c) => (
+                <View key={c.id} style={styles.commentItem}>
+                  {c.avatarUrl ? (
+                    <Image
+                      source={{ uri: c.avatarUrl }}
+                      style={styles.commentAvatar}
+                    />
+                  ) : (
+                    <View style={[styles.commentAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#ddd' }]}>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#666' }}>
+                        {c.username?.charAt(0).toUpperCase() || 'U'}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commentUser}>{c.username}</Text>
+                    <Text style={styles.commentContent}>{c.text}</Text>
+                    <View style={styles.commentMeta}>
+                      <Text style={styles.commentTime}>
+                        {new Date(c.timestamp).toLocaleDateString()}
+                      </Text>
+                      <Text style={styles.commentReply}>Reply</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={{ alignItems: 'center' }}
+                    onPress={() => handleLikeComment(c.id, c.isLiked || false)}
+                  >
+                    <Heart
+                      size={16}
+                      color={c.isLiked ? '#fe2c55' : '#ccc'}
+                      fill={c.isLiked ? '#fe2c55' : 'none'}
+                    />
+                    <Text style={{ fontSize: 10, color: '#888' }}>
+                      {c.likesCount || 0}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </ScrollView>
 
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -411,8 +530,8 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
                 onChangeText={setCommentText}
               />
               <TouchableOpacity onPress={() => {
-                if (commentText.trim()) {
-                  setComments([...comments, { id: Date.now().toString(), user: 'you', text: commentText, likes: 0 }]);
+                if (commentText.trim() && currentUserInfo) {
+                  handleAddComment(commentText);
                   setCommentText('');
                 }
               }}>
