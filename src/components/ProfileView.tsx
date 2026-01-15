@@ -23,6 +23,7 @@ interface ProfileViewProps {
   onMessage?: (user: User) => void;
   onSubViewChange?: (isSubView: boolean) => void;
   onUserUpdate?: (user: User) => void;
+  onCurrentUserUpdate?: (user: User) => void;
   onSelectVideo?: (video: Video) => void;
   onVideoUpdate?: (videoId: string, action: 'delete' | 'unlike' | 'unsave') => void;
 }
@@ -36,6 +37,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   onMessage,
   onSubViewChange,
   onUserUpdate,
+  onCurrentUserUpdate,
   onSelectVideo,
   onVideoUpdate
 }) => {
@@ -63,10 +65,39 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     }
   }, [initialUser.uid, currentUserId, isOwnProfile]);
 
+  // Fetch full user data from Firebase on mount or when uid changes
+  useEffect(() => {
+    const fetchFullUserData = async () => {
+      if (!initialUser.uid) return;
+      try {
+        const fullUserData = await userService.getUserById(initialUser.uid);
+        if (fullUserData) {
+          console.log('ProfileView - Fetched full user data from Firebase:', fullUserData);
+          setCurrentUserData(fullUserData);
+          setFollowerCount(fullUserData.followersCount || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching full user data:', error);
+        // Fallback to initialUser if fetch fails
+        setCurrentUserData(initialUser);
+        setFollowerCount(initialUser.followersCount || 0);
+      }
+    };
+    
+    fetchFullUserData();
+  }, [initialUser.uid]);
+
   useEffect(() => {
     setCurrentUserData(initialUser);
     setFollowerCount(initialUser.followersCount);
+    console.log('ProfileView - initialUser:', initialUser);
   }, [initialUser]);
+
+  // Sync followerCount when currentUserData changes
+  useEffect(() => {
+    setFollowerCount(currentUserData.followersCount);
+    console.log('ProfileView - currentUserData updated:', currentUserData);
+  }, [currentUserData.followersCount]);
 
   // Fetch videos when tab changes
   useEffect(() => {
@@ -200,11 +231,27 @@ const ProfileView: React.FC<ProfileViewProps> = ({
       if (isFollowing) {
         await userService.unfollowUser(currentUserId, currentUserData.uid);
         setIsFollowing(false);
-        setFollowerCount(prev => Math.max(0, prev - 1));
       } else {
         await userService.followUser(currentUserId, currentUserData.uid);
         setIsFollowing(true);
-        setFollowerCount(prev => prev + 1);
+      }
+      
+      // Fetch updated user data from Firebase
+      const updatedUser = await userService.getUserById(currentUserData.uid);
+      if (updatedUser) {
+        setCurrentUserData(updatedUser);
+        setFollowerCount(updatedUser.followersCount);
+        if (onUserUpdate) onUserUpdate(updatedUser);
+        console.log('Updated user after follow toggle:', updatedUser);
+      }
+      
+      // Callback to update current user's following count
+      if (onCurrentUserUpdate) {
+        const currentUser = await userService.getUserById(currentUserId);
+        if (currentUser) {
+          onCurrentUserUpdate(currentUser);
+          console.log('Updated current user:', currentUser);
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update follow status');
@@ -277,12 +324,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({
               {/* Stats Section */}
               <View style={styles.stats}>
                 <TouchableOpacity style={styles.statItem}>
-                  <Text style={styles.statVal}>{currentUserData.followingCount || 14}</Text>
+                  <Text style={styles.statVal}>{currentUserData.followingCount || 0}</Text>
                   <Text style={styles.statLab}>Following</Text>
                 </TouchableOpacity>
                 <View style={styles.divider} />
                 <TouchableOpacity style={styles.statItem}>
-                  <Text style={styles.statVal}>{followerCount || 38}</Text>
+                  <Text style={styles.statVal}>{currentUserData.followersCount || 0}</Text>
                   <Text style={styles.statLab}>Followers</Text>
                 </TouchableOpacity>
                 <View style={styles.divider} />

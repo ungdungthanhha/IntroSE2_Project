@@ -410,6 +410,12 @@ const AppContent = () => {
                 }}
                 userVideos={otherVideos}
                 onSelectVideo={handleSelectSearchedVideo}
+                onUserUpdate={(updatedProfile) => {
+                  setViewingProfile(updatedProfile);
+                }}
+                onCurrentUserUpdate={(updatedCurrentUser) => {
+                  setCurrentUser(updatedCurrentUser);
+                }}
               />
             </View>
           )}
