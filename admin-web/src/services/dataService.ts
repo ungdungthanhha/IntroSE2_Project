@@ -29,7 +29,7 @@ export const getVideos = async (): Promise<Video[]> => {
   try {
     const videosRef = collection(db, COLLECTIONS.VIDEOS);
     // Sắp xếp video mới nhất lên đầu
-    const q = query(videosRef, orderBy("timestamp", "desc"));
+    const q = query(videosRef, orderBy("createdAt", "desc"));
     const snapshot = await getDocs(q);
 
     // Ép kiểu về Video chuẩn
