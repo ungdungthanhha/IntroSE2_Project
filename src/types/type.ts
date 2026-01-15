@@ -9,7 +9,7 @@ export interface User {
   avatarUrl: string;
   bio: string;
   followersCount: number;
-  rfollowingCount: number;
+  followingCount: number;
   instagramHandle?: string;
   youtubeHandle?: string;
 }
