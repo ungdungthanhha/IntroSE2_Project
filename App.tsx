@@ -322,6 +322,7 @@ const AppContent = () => {
                               currentUserId={currentUser?.uid} // Pass currentUserId
                               onLikeChange={() => fetchVideos(false)} // Refresh videos when user likes
                               onSaveChange={() => fetchVideos(false)} // Refresh videos when user saves
+                              onCommentAdded={() => fetchVideos(false)} // Refresh videos when user comments
                             />
                           )}
                           snapToInterval={ACTUAL_VIDEO_HEIGHT}
@@ -460,6 +461,7 @@ const AppContent = () => {
                   // Also refresh main feed
                   fetchVideos(false);
                 }}
+                onCommentAdded={() => fetchVideos(false)} // Refresh videos when user comments
               />
               <TouchableOpacity
                 style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 9991, padding: 8 }}

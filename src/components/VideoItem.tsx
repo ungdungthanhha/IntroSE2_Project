@@ -24,9 +24,10 @@ interface VideoItemProps {
   currentUserId?: string; // New prop
   onLikeChange?: (videoId: string, isLiked: boolean) => void; // Callback for like changes
   onSaveChange?: (videoId: string, isSaved: boolean) => void; // Callback for save changes
+  onCommentAdded?: (videoId: string) => void; // Callback when comment is added
 }
 
-const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId, onLikeChange, onSaveChange }) => {
+const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId, onLikeChange, onSaveChange, onCommentAdded }) => {
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -44,6 +45,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [isSaved, setIsSaved] = useState(video.isSaved || false);
   const [likeCount, setLikeCount] = useState(video.likesCount);
   const [saveCount, setSaveCount] = useState(video.savesCount || 0);
+  const [commentCount, setCommentCount] = useState(video.commentsCount || 0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -90,7 +92,8 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setIsSaved(video.isSaved || false);
     setLikeCount(video.likesCount || 0);
     setSaveCount(video.savesCount || 0);
-  }, [video.id, video.isLiked, video.isSaved, video.likesCount, video.savesCount]);
+    setCommentCount(video.commentsCount || 0);
+  }, [video.id, video.isLiked, video.isSaved, video.likesCount, video.savesCount, video.commentsCount]);
 
   const fetchComments = async () => {
     setLoadingComments(true);
@@ -293,7 +296,10 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
     if (result.success && result.comment) {
       setComments([result.comment, ...comments]);
+      setCommentCount(prev => prev + 1);
       console.log('Comment added:', result.comment);
+      // Notify parent to refresh videos from database
+      onCommentAdded?.(video.id);
     }
   };
 
@@ -448,7 +454,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
           <TouchableOpacity style={styles.action} onPress={() => setShowComments(true)}>
             <MessageCircle size={35} color="#fff" />
-            <Text style={styles.actionText}>{video.commentsCount}</Text>
+            <Text style={styles.actionText}>{commentCount}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.action} onPress={handleSave}>
