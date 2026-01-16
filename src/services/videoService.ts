@@ -304,6 +304,10 @@ export const getLikedVideos = async (userId: string): Promise<Video[]> => {
     const videoPromises = videoIds.map(id => db.collection(COLLECTIONS.VIDEOS).doc(id).get());
     const videoDocs = await Promise.all(videoPromises);
 
+    // 3. Also fetch saved videos to mark them if applicable
+    const savedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').get();
+    const savedVideoIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
     return videoDocs
       .filter(doc => doc.exists)
       .map(doc => {
@@ -311,7 +315,14 @@ export const getLikedVideos = async (userId: string): Promise<Video[]> => {
         const createdAt = typeof data.createdAt === 'string'
           ? new Date(data.createdAt).getTime()
           : data.createdAt;
-        return { id: doc.id, ...data, createdAt } as Video;
+        // Mark as liked and check if also saved
+        return { 
+          id: doc.id, 
+          ...data, 
+          createdAt,
+          isLiked: true,
+          isSaved: savedVideoIds.has(doc.id)
+        } as Video;
       })
       .sort((a, b) => {
         const timeDiff = b.createdAt - a.createdAt;
@@ -339,6 +350,10 @@ export const getSavedVideos = async (userId: string): Promise<Video[]> => {
     const videoPromises = videoIds.map(id => db.collection(COLLECTIONS.VIDEOS).doc(id).get());
     const videoDocs = await Promise.all(videoPromises);
 
+    // Also fetch liked videos to mark them if applicable
+    const likedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').get();
+    const likedVideoIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+
     return videoDocs
       .filter(doc => doc.exists)
       .map(doc => {
@@ -346,7 +361,14 @@ export const getSavedVideos = async (userId: string): Promise<Video[]> => {
         const createdAt = typeof data.createdAt === 'string'
           ? new Date(data.createdAt).getTime()
           : data.createdAt;
-        return { id: doc.id, ...data, createdAt } as Video;
+        // Mark as saved and check if also liked
+        return { 
+          id: doc.id, 
+          ...data, 
+          createdAt,
+          isSaved: true,
+          isLiked: likedVideoIds.has(doc.id)
+        } as Video;
       })
       .sort((a, b) => {
         const timeDiff = b.createdAt - a.createdAt;
