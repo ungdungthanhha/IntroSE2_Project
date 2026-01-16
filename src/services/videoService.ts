@@ -1,6 +1,7 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
 import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
+import * as notificationService from './notificationService';
 import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '@env';
 import { launchImageLibrary, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
@@ -214,6 +215,21 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
       batch.update(videoRef, {
         likesCount: firestore.FieldValue.increment(1)
       });
+
+      // Gửi thông báo
+      const videoDoc = await videoRef.get();
+      const videoData = videoDoc.data() as Video;
+      if (videoData && videoData.ownerUid !== userId) {
+        notificationService.sendNotification({
+          type: 'like',
+          fromUserId: userId,
+          fromUserName: (await db.collection(COLLECTIONS.USERS).doc(userId).get()).data()?.username || 'User',
+          fromUserAvatar: (await db.collection(COLLECTIONS.USERS).doc(userId).get()).data()?.avatarUrl || '',
+          toUserId: videoData.ownerUid,
+          videoId: videoId,
+          videoThumbnail: videoData.thumbUrl || '',
+        });
+      }
     }
 
     await batch.commit();
@@ -407,6 +423,23 @@ export const addComment = async (videoId: string, userId: string, userAvatar: st
     });
 
     await batch.commit();
+
+    // Gửi thông báo
+    const videoDoc = await videoRef.get();
+    const videoData = videoDoc.data() as Video;
+    if (videoData && videoData.ownerUid !== userId) {
+      notificationService.sendNotification({
+        type: 'comment',
+        fromUserId: userId,
+        fromUserName: username,
+        fromUserAvatar: userAvatar,
+        toUserId: videoData.ownerUid,
+        videoId: videoId,
+        videoThumbnail: videoData.thumbUrl || '',
+        commentText: text,
+      });
+    }
+
     return { success: true, comment: newComment }; //
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -486,7 +519,7 @@ export const getVideoComments = async (videoId: string, userId?: string): Promis
 
     for (const doc of commentsSnapshot.docs) {
       const commentData = doc.data() as Comment;
-      
+
       // Check if current user liked this comment
       if (userId) {
         const likeDoc = await doc.ref.collection('likes').doc(userId).get();

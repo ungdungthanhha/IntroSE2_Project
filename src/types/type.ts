@@ -14,6 +14,20 @@ export interface User {
   youtubeHandle?: string;
 }
 
+export interface Notification {
+  id: string;
+  type: 'like' | 'comment' | 'follow';
+  fromUserId: string;
+  fromUserName: string;
+  fromUserAvatar: string;
+  toUserId: string;
+  videoId?: string;
+  videoThumbnail?: string;
+  commentText?: string;
+  timestamp: number;
+  isRead: boolean;
+}
+
 export interface Video {
   id: string;
   ownerUid: string;

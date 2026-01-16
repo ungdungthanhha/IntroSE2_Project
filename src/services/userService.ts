@@ -1,6 +1,7 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
 import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '@env';
+import * as notificationService from './notificationService';
 
 
 
@@ -117,6 +118,17 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     });
 
     await batch.commit();
+
+    if (currentUserData && targetUserData) {
+      notificationService.sendNotification({
+        type: 'follow',
+        fromUserId: currentUserId,
+        fromUserName: currentUserData.username,
+        fromUserAvatar: currentUserData.avatarUrl,
+        toUserId: targetUserId,
+      });
+    }
+
     return { success: true };
   } catch (error: any) {
     console.error('Error following user:', error);
@@ -288,7 +300,7 @@ export const getFollowers = async (userId: string): Promise<User[]> => {
       .get();
 
     const followers: User[] = [];
-    
+
     for (const doc of followersSnapshot.docs) {
       const followerData = doc.data();
       const userDoc = await getUserById(followerData.userId);
@@ -296,7 +308,7 @@ export const getFollowers = async (userId: string): Promise<User[]> => {
         followers.push(userDoc);
       }
     }
-    
+
     return followers;
   } catch (error) {
     console.error('Error getting followers:', error);
@@ -316,7 +328,7 @@ export const getFollowing = async (userId: string): Promise<User[]> => {
       .get();
 
     const following: User[] = [];
-    
+
     for (const doc of followingSnapshot.docs) {
       const followingData = doc.data();
       const userDoc = await getUserById(followingData.userId);
@@ -324,7 +336,7 @@ export const getFollowing = async (userId: string): Promise<User[]> => {
         following.push(userDoc);
       }
     }
-    
+
     return following;
   } catch (error) {
     console.error('Error getting following:', error);
