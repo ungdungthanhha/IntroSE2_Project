@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
 import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, Send, Bell } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Chat, Message, User } from '../types/type';
+import { Chat, Message, User, Video as VideoType } from '../types/type';
 import * as chatService from '../services/chatService';
 import * as userService from '../services/userService';
 import * as notificationService from '../services/notificationService';
@@ -12,11 +12,13 @@ import ActivityView from './ActivityView';
 interface ChatViewProps {
   onChatDetailChange?: (isInDetail: boolean) => void;
   currentUser: User;
+  onSelectUser: (user: Partial<User>) => void;
+  onSelectVideo: (video: VideoType) => void;
 }
 
 type InboxTab = 'activity' | 'messages';
 
-const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) => {
+const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, onSelectUser, onSelectVideo }) => {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<InboxTab>('messages');
@@ -114,7 +116,14 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
 
   // Activity View
   if (activeTab === 'activity') {
-    return <ActivityView currentUser={currentUser} onBack={() => setActiveTab('messages')} />;
+    return (
+      <ActivityView
+        currentUser={currentUser}
+        onBack={() => setActiveTab('messages')}
+        onSelectUser={onSelectUser}
+        onSelectVideo={onSelectVideo}
+      />
+    );
   }
 
   // Chat Conversation View
