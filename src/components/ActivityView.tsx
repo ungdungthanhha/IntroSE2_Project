@@ -1,17 +1,20 @@
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, TouchableOpacity, FlatList, Image, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { ArrowLeft, BellOff, Heart, MessageCircle, UserPlus } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Notification } from '../types/type';
+import { User, Notification, Video as VideoType } from '../types/type';
 import * as notificationService from '../services/notificationService';
+import * as videoService from '../services/videoService';
 
 interface ActivityViewProps {
     currentUser: User;
     onBack: () => void;
+    onSelectUser: (user: Partial<User>) => void;
+    onSelectVideo: (video: VideoType) => void;
 }
 
-const ActivityView: React.FC<ActivityViewProps> = ({ currentUser, onBack }) => {
+const ActivityView: React.FC<ActivityViewProps> = ({ currentUser, onBack, onSelectUser, onSelectVideo }) => {
     const insets = useSafeAreaInsets();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
@@ -21,7 +24,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({ currentUser, onBack }) => {
         if (!currentUser?.uid) return;
 
         setLoading(true);
-        const unsubscribe = notificationService.getNotifications(currentUser.uid, (list) => {
+        const unsubscribe = notificationService.getNotifications(currentUser.uid, (list: Notification[]) => {
             setNotifications(list);
             setLoading(false);
             setRefreshing(false);
@@ -38,6 +41,35 @@ const ActivityView: React.FC<ActivityViewProps> = ({ currentUser, onBack }) => {
     const handleMarkAllAsRead = async () => {
         if (!currentUser?.uid) return;
         await notificationService.markAllAsRead(currentUser.uid);
+    };
+
+    const handleNotificationPress = async (noti: Notification) => {
+        // 1. Đánh dấu đã đọc
+        if (!noti.isRead) {
+            notificationService.markAsRead(noti.id);
+        }
+
+        // 2. Điều hướng tùy theo loại thông báo
+        if (noti.type === 'follow') {
+            onSelectUser({
+                uid: noti.fromUserId,
+                username: noti.fromUserName,
+                avatarUrl: noti.fromUserAvatar
+            });
+        } else if ((noti.type === 'like' || noti.type === 'comment') && noti.videoId) {
+            // Fetch full video object
+            try {
+                const videoData = await videoService.getVideoById(noti.videoId, currentUser.uid);
+                if (videoData) {
+                    onSelectVideo(videoData);
+                } else {
+                    Alert.alert('Lỗi', 'Video này không còn tồn tại hoặc đã bị xóa.');
+                }
+            } catch (error) {
+                console.error('Error fetching video for notification:', error);
+                Alert.alert('Lỗi', 'Không thể mở video vào lúc này.');
+            }
+        }
     };
 
     const renderNotificationIcon = (type: string) => {
@@ -69,7 +101,7 @@ const ActivityView: React.FC<ActivityViewProps> = ({ currentUser, onBack }) => {
     const renderItem = ({ item }: { item: Notification }) => (
         <TouchableOpacity
             style={[styles.notiItem, !item.isRead && styles.unreadItem]}
-            onPress={() => !item.isRead && notificationService.markAsRead(item.id)}
+            onPress={() => handleNotificationPress(item)}
         >
             <View style={styles.avatarWrapper}>
                 <Image source={{ uri: item.fromUserAvatar || 'https://picsum.photos/200' }} style={styles.avatar} />
@@ -88,7 +120,14 @@ const ActivityView: React.FC<ActivityViewProps> = ({ currentUser, onBack }) => {
                 <Image source={{ uri: item.videoThumbnail }} style={styles.videoThumbnail} />
             )}
             {item.type === 'follow' && (
-                <TouchableOpacity style={styles.followBtn}>
+                <TouchableOpacity
+                    style={styles.followBtn}
+                    onPress={(e) => {
+                        e.stopPropagation();
+                        // Optional: Handle follow back directly here if needed
+                        handleNotificationPress(item);
+                    }}
+                >
                     <Text style={styles.followBtnText}>Follow back</Text>
                 </TouchableOpacity>
             )}

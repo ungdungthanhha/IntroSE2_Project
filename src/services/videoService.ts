@@ -150,6 +150,41 @@ export const getAllVideos = async (userId?: string): Promise<Video[]> => {
 };
 
 /**
+ * NEW: Lấy chi tiết một Video bằng ID
+ */
+export const getVideoById = async (videoId: string, userId?: string): Promise<Video | null> => {
+  try {
+    const doc = await db.collection(COLLECTIONS.VIDEOS).doc(videoId).get();
+    if (!doc.exists()) return null;
+
+    const data = doc.data()!;
+    const createdAt = typeof data.createdAt === 'string'
+      ? new Date(data.createdAt).getTime()
+      : data.createdAt;
+
+    const video = {
+      id: doc.id,
+      ...data,
+      createdAt
+    } as Video;
+
+    if (userId) {
+      const [likedDoc, savedDoc] = await Promise.all([
+        db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').doc(videoId).get(),
+        db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').doc(videoId).get()
+      ]);
+      video.isLiked = likedDoc.exists();
+      video.isSaved = savedDoc.exists();
+    }
+
+    return video;
+  } catch (error) {
+    console.error('Error getting video by id:', error);
+    return null;
+  }
+};
+
+/**
  * 4. Lấy danh sách video của một USER cụ thể (Cho màn hình Profile)
  */
 export const getVideosByUser = async (userId: string): Promise<Video[]> => {
@@ -290,7 +325,7 @@ export const deleteVideo = async (videoId: string, userId: string): Promise<{ su
 
     // Kiểm tra quyền sở hữu (Security Rule cũng sẽ chặn, nhưng check ở đây cho chắc)
     const doc = await videoRef.get();
-    if (!doc.exists) return { success: false, error: "Video not found" };
+    if (!doc.exists()) return { success: false, error: "Video not found" };
     if (doc.data()?.ownerUid !== userId) return { success: false, error: "Unauthorized" };
 
     // Xóa video (Lưu ý: Để xóa sạch hoàn toàn cần Cloud Functions để xóa recursive các subcollection likes/comments)
@@ -325,16 +360,16 @@ export const getLikedVideos = async (userId: string): Promise<Video[]> => {
     const savedVideoIds = new Set(savedSnapshot.docs.map(doc => doc.id));
 
     return videoDocs
-      .filter(doc => doc.exists)
+      .filter(doc => doc.exists())
       .map(doc => {
         const data = doc.data()!;
         const createdAt = typeof data.createdAt === 'string'
           ? new Date(data.createdAt).getTime()
           : data.createdAt;
         // Mark as liked and check if also saved
-        return { 
-          id: doc.id, 
-          ...data, 
+        return {
+          id: doc.id,
+          ...data,
           createdAt,
           isLiked: true,
           isSaved: savedVideoIds.has(doc.id)
@@ -371,16 +406,16 @@ export const getSavedVideos = async (userId: string): Promise<Video[]> => {
     const likedVideoIds = new Set(likedSnapshot.docs.map(doc => doc.id));
 
     return videoDocs
-      .filter(doc => doc.exists)
+      .filter(doc => doc.exists())
       .map(doc => {
         const data = doc.data()!;
         const createdAt = typeof data.createdAt === 'string'
           ? new Date(data.createdAt).getTime()
           : data.createdAt;
         // Mark as saved and check if also liked
-        return { 
-          id: doc.id, 
-          ...data, 
+        return {
+          id: doc.id,
+          ...data,
           createdAt,
           isSaved: true,
           isLiked: likedVideoIds.has(doc.id)

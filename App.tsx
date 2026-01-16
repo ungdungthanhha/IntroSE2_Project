@@ -177,8 +177,8 @@ const AppContent = () => {
   };
 
   // Fetch videos on mount and when currentUser changes
-  useEffect(() => { 
-    fetchVideos(); 
+  useEffect(() => {
+    fetchVideos();
   }, [currentUser?.uid]);
 
   // Fetch My Videos
@@ -351,7 +351,14 @@ const AppContent = () => {
 
                 {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} />}
                 {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); if (currentUser?.uid) videoService.getVideosByUser(currentUser.uid).then(setMyVideos); setActiveTab(AppTab.HOME); }} />}
-                {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} currentUser={currentUser!} />}
+                {activeTab === AppTab.INBOX && (
+                  <ChatView
+                    onChatDetailChange={setIsInChatDetail}
+                    currentUser={currentUser!}
+                    onSelectUser={handleSelectSearchedUser}
+                    onSelectVideo={handleSelectSearchedVideo}
+                  />
+                )}
 
                 {/* Khi bấm Tab Profile chính chủ */}
                 {activeTab === AppTab.PROFILE && currentUser && (
