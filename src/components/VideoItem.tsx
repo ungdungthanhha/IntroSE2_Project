@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
   ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState,
-  Alert, Keyboard, KeyboardEvent, ActivityIndicator
+  Alert, Keyboard, KeyboardEvent, ActivityIndicator, Modal, TouchableWithoutFeedback
 } from 'react-native';
 import Video from 'react-native-video';
 import SoundPlayer from 'react-native-sound';
@@ -583,84 +583,99 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
       {/* MODAL COMMENT */}
       {showComments && (
-        <View style={styles.commentModal}>
-          <View style={styles.commentHeader}>
-            <Text style={styles.commentTitle}>{comments.length} comments</Text>
-            <TouchableOpacity onPress={() => setShowComments(false)}>
-              <X size={24} color="#000" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.commentList}>
-            {loadingComments ? (
-              <View style={{ alignItems: 'center', marginTop: 20 }}>
-                <ActivityIndicator size="large" color="#fe2c55" />
-              </View>
-            ) : comments.length === 0 ? (
-              <View style={{ alignItems: 'center', marginTop: 20 }}>
-                <Text style={{ color: '#888' }}>No comments yet</Text>
-              </View>
-            ) : (
-              comments.map((c) => (
-                <View key={c.id} style={styles.commentItem}>
-                  {c.avatarUrl ? (
-                    <Image
-                      source={{ uri: c.avatarUrl }}
-                      style={styles.commentAvatar}
-                    />
-                  ) : (
-                    <View style={[styles.commentAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#ddd' }]}>
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#666' }}>
-                        {c.username?.charAt(0).toUpperCase() || 'U'}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.commentUser}>{c.username}</Text>
-                    <Text style={styles.commentContent}>{c.text}</Text>
-                    <View style={styles.commentMeta}>
-                      <Text style={styles.commentTime}>
-                        {new Date(c.timestamp).toLocaleDateString()}
-                      </Text>
-                      <Text style={styles.commentReply}>Reply</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={{ alignItems: 'center' }}
-                    onPress={() => handleLikeComment(c.id, c.isLiked || false)}
-                  >
-                    <Heart
-                      size={16}
-                      color={c.isLiked ? '#fe2c55' : '#ccc'}
-                      fill={c.isLiked ? '#fe2c55' : 'none'}
-                    />
-                    <Text style={{ fontSize: 10, color: '#888' }}>
-                      {c.likesCount || 0}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ))
-            )}
-          </ScrollView>
-
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Add comment..."
-                value={commentText}
-                onChangeText={setCommentText}
-              />
-              <TouchableOpacity onPress={() => {
-                if (commentText.trim() && currentUserInfo) {
-                  handleAddComment(commentText);
-                  setCommentText('');
-                }
-              }}>
-                <Send size={24} color="#fe2c55" />
+        <Modal
+          visible={showComments}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowComments(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowComments(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+          </TouchableWithoutFeedback>
+          
+          <View style={styles.commentModal}>
+            <View style={styles.commentHeader}>
+              <Text style={styles.commentTitle}>{comments.length} comments</Text>
+              <TouchableOpacity onPress={() => setShowComments(false)}>
+                <X size={24} color="#000" />
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </View>
+            
+            <ScrollView style={styles.commentList}>
+              {loadingComments ? (
+                <View style={{ alignItems: 'center', marginTop: 20 }}>
+                  <ActivityIndicator size="large" color="#fe2c55" />
+                </View>
+              ) : comments.length === 0 ? (
+                <View style={{ alignItems: 'center', marginTop: 20 }}>
+                  <Text style={{ color: '#888' }}>No comments yet</Text>
+                </View>
+              ) : (
+                comments.map((c) => (
+                  <View key={c.id} style={styles.commentItem}>
+                    {c.avatarUrl ? (
+                      <Image
+                        source={{ uri: c.avatarUrl }}
+                        style={styles.commentAvatar}
+                      />
+                    ) : (
+                      <View style={[styles.commentAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#ddd' }]}>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#666' }}>
+                          {c.username?.charAt(0).toUpperCase() || 'U'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.commentUser}>{c.username}</Text>
+                      <Text style={styles.commentContent}>{c.text}</Text>
+                      <View style={styles.commentMeta}>
+                        <Text style={styles.commentTime}>
+                          {new Date(c.timestamp).toLocaleDateString()}
+                        </Text>
+                        <Text style={styles.commentReply}>Reply</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={{ alignItems: 'center' }}
+                      onPress={() => handleLikeComment(c.id, c.isLiked || false)}
+                    >
+                      <Heart
+                        size={16}
+                        color={c.isLiked ? '#fe2c55' : '#ccc'}
+                        fill={c.isLiked ? '#fe2c55' : 'none'}
+                      />
+                      <Text style={{ fontSize: 10, color: '#888' }}>
+                        {c.likesCount || 0}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <KeyboardAvoidingView 
+              behavior={Platform.OS === 'ios' ? 'position' : 'height'}
+              keyboardVerticalOffset={0}
+            >
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Add comment..."
+                  value={commentText}
+                  onChangeText={setCommentText}
+                />
+                <TouchableOpacity onPress={() => {
+                  if (commentText.trim() && currentUserInfo) {
+                    handleAddComment(commentText);
+                    setCommentText('');
+                  }
+                }}>
+                  <Send size={24} color="#fe2c55" />
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
       )}
     </View>
   );
@@ -701,7 +716,7 @@ const styles = StyleSheet.create({
   progressBar: { height: '100%', backgroundColor: '#fff' },
 
   // Comments
-  commentModal: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%', backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12, zIndex: 100 },
+  commentModal: { height: '60%', backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
   commentHeader: { padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 0.5, borderColor: '#eee' },
   commentTitle: { fontWeight: 'bold', fontSize: 14 },
   commentList: { flex: 1 },
