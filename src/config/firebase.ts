@@ -13,4 +13,5 @@ export const COLLECTIONS = {
   CHATS: 'chats',
   LIVESTREAMS: 'livestreams',
   REPORTS: 'reports',
+  NOTIFICATIONS: 'notifications',
 };
