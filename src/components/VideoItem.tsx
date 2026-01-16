@@ -39,6 +39,28 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     return () => { isMounted.current = false; };
   }, []);
 
+  // Handle app state changes (pause sound when app goes to background)
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  const handleAppStateChange = (state: any) => {
+    if (state === 'background' || state === 'inactive') {
+      // App is in background, pause/stop sound
+      if (soundRef.current) {
+        try {
+          soundRef.current.stop();
+        } catch (e) {
+          console.log('Error stopping sound on app background:', e);
+        }
+      }
+    }
+  };
+
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false); // Local pause state
   const [isLiked, setIsLiked] = useState(video.isLiked || false);
