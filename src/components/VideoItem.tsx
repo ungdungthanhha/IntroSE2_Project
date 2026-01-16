@@ -2,13 +2,16 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
-  ScrollView, TextInput, KeyboardAvoidingView, Pressable, Alert, Keyboard, KeyboardEvent
+  ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState,
+  Alert, Keyboard, KeyboardEvent, ActivityIndicator, Modal, TouchableWithoutFeedback
 } from 'react-native';
 import Video from 'react-native-video';
+import SoundPlayer from 'react-native-sound';
 import { Heart, MessageCircle, Bookmark, Plus, Music, Share2, X, Send, Play, Flag } from 'lucide-react-native';
 import { Video as VideoType, User, ReportReason } from '../types/type';
 import * as videoService from '../services/videoService';
 import * as reportService from '../services/reportService';
+import * as userService from '../services/userService';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -19,19 +22,44 @@ interface VideoItemProps {
   onViewProfile?: (user: User) => void;
   itemHeight: number;
   currentUserId?: string; // New prop
+  onLikeChange?: (videoId: string, isLiked: boolean) => void; // Callback for like changes
+  onSaveChange?: (videoId: string, isSaved: boolean) => void; // Callback for save changes
+  onCommentAdded?: (videoId: string) => void; // Callback when comment is added
 }
 
-const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId }) => {
+const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onViewProfile, itemHeight, currentUserId, onLikeChange, onSaveChange, onCommentAdded }) => {
   // 1. QUẢN LÝ VÒNG ĐỜI (CHỐNG VĂNG KHI CHUYỂN TRANG NHANH)
   const isMounted = useRef(true);
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const soundRef = useRef<typeof SoundPlayer.prototype | null>(null);
   const reportScrollViewRef = useRef<ScrollView>(null);
-  const commentReportScrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     isMounted.current = true;
     return () => { isMounted.current = false; };
   }, []);
+
+  // Handle app state changes (pause sound when app goes to background)
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  const handleAppStateChange = (state: any) => {
+    if (state === 'background' || state === 'inactive') {
+      // App is in background, pause/stop sound
+      if (soundRef.current) {
+        try {
+          soundRef.current.stop();
+        } catch (e) {
+          console.log('Error stopping sound on app background:', e);
+        }
+      }
+    }
+  };
 
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false); // Local pause state
@@ -39,22 +67,156 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [isSaved, setIsSaved] = useState(video.isSaved || false);
   const [likeCount, setLikeCount] = useState(video.likesCount);
   const [saveCount, setSaveCount] = useState(video.savesCount || 0);
+  const [commentCount, setCommentCount] = useState(video.commentsCount || 0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState([
-    { id: '1', user: 'alex_j', userUid: 'user1', text: 'Phở ngon quá bạn ơi! 🔥', likes: 12 },
-    { id: '2', user: 'chef_master', userUid: 'user2', text: 'Landmark 81 view đỉnh thật.', likes: 5 },
-  ]);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null);
   const [reportDetails, setReportDetails] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  // Comment Report State
-  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
-  const [selectedComment, setSelectedComment] = useState<{ id: string; user: string; userUid: string; text: string } | null>(null);
-  const [commentReportReason, setCommentReportReason] = useState<ReportReason | null>(null);
-  const [commentReportDetails, setCommentReportDetails] = useState('');
+  const [currentUserInfo, setCurrentUserInfo] = useState({ uid: '', username: '', avatarUrl: '' });
+
+  // Fetch current user info on component mount
+  useEffect(() => {
+    const fetchCurrentUserInfo = async () => {
+      if (currentUserId) {
+        try {
+          const userInfo = await userService.getUserById(currentUserId);
+          if (userInfo) {
+            setCurrentUserInfo({
+              uid: userInfo.uid,
+              username: userInfo.displayName || userInfo.username || 'Anonymous',
+              avatarUrl: userInfo.avatarUrl || ''
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching current user info:', error);
+        }
+      }
+    };
+
+    fetchCurrentUserInfo();
+  }, [currentUserId]);
+
+  // Fetch comments when modal opens
+  useEffect(() => {
+    if (showComments) {
+      fetchComments();
+    }
+  }, [showComments]);
+
+  // Sync like/save state when video prop changes
+  useEffect(() => {
+    setIsLiked(video.isLiked || false);
+    setIsSaved(video.isSaved || false);
+    setLikeCount(video.likesCount || 0);
+    setSaveCount(video.savesCount || 0);
+    setCommentCount(video.commentsCount || 0);
+  }, [video.id, video.isLiked, video.isSaved, video.likesCount, video.savesCount, video.commentsCount]);
+
+  const fetchComments = async () => {
+    setLoadingComments(true);
+    try {
+      const fetchedComments = await videoService.getVideoComments(video.id, currentUserId);
+      setComments(fetchedComments);
+      console.log('Fetched comments:', fetchedComments);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // 2. LOGIC ĐĨA NHẠC XOAY (MOVED DOWN) - 5. LOGIC PHÁT NHẠC NỀN
+  useEffect(() => {
+    // 5. LOGIC PHÁT NHẠC NỀN
+    // Clean up function to release sound resource
+    const cleanupSound = () => {
+      if (soundRef.current) {
+        try {
+          soundRef.current.stop();
+          soundRef.current.release();
+        } catch (error) {
+          console.log('Error releasing sound:', error);
+        }
+        soundRef.current = null;
+      }
+    };
+
+    // If no custom sound or shouldn't load, cleanup
+    if (!video.soundAudioUrl || !shouldLoad) {
+      cleanupSound();
+      return;
+    }
+
+    // Initialize sound if not exists
+    if (!soundRef.current && isActive) {
+      if (typeof SoundPlayer !== 'undefined') {
+        try {
+          // @ts-ignore
+          const sound = new SoundPlayer(video.soundAudioUrl, null, (error) => {
+            if (error) {
+              console.log('failed to load the sound', error);
+              return;
+            }
+
+            // Loaded successfully
+            sound.setNumberOfLoops(-1); // Infinite loop
+
+            // Check if still mounted and active before playing
+            if (isMounted.current && isActive && !isPaused) {
+              sound.play((success) => {
+                if (!success) {
+                  console.log('playback failed due to audio decoding errors');
+                }
+              });
+            }
+          });
+          soundRef.current = sound;
+        } catch (e) {
+          console.error("Failed to initialize SoundPlayer", e);
+        }
+      }
+    } else if (soundRef.current) {
+      // Control existing sound instance
+      try {
+        if (isActive && !isPaused) {
+          soundRef.current.play();
+        } else {
+          soundRef.current.pause();
+        }
+      } catch (e) {
+        console.error("Error controlling sound", e);
+      }
+    }
+
+    return () => {
+      // We don't release here immediately on every dependency change to avoid reloading
+      // But we strictly control play/pause
+      if (!isActive && soundRef.current) {
+        try {
+          soundRef.current.pause();
+        } catch (e) {
+          console.log("Error pausing sound", e);
+        }
+      }
+    };
+  }, [video.soundAudioUrl, isActive, isPaused, shouldLoad]);
+
+  // Clean up on unmount or video change
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.stop();
+        soundRef.current.release();
+        soundRef.current = null;
+      }
+    };
+  }, [video.id]);
+
   // 2. LOGIC ĐĨA NHẠC XOAY
   useEffect(() => {
     if (isActive) {
@@ -76,6 +238,13 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     }
   }, [isActive]);
 
+  // TRACK VIDEO VIEW
+  useEffect(() => {
+    if (isActive) {
+      videoService.trackVideoView(video.id);
+    }
+  }, [isActive, video.id]);
+
   // HANDLE KEYBOARD EVENTS FOR REPORT MODAL
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -83,18 +252,6 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
     const keyboardShowListener = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
       setKeyboardHeight(e.endCoordinates.height);
-      // Auto scroll comment report modal when keyboard appears
-      if (showCommentReportModal && commentReportReason === ReportReason.OTHER) {
-        setTimeout(() => {
-          commentReportScrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 50);
-      }
-      // Auto scroll video report modal when keyboard appears
-      if (showReportModal && selectedReason === ReportReason.OTHER) {
-        setTimeout(() => {
-          reportScrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 50);
-      }
     });
 
     const keyboardHideListener = Keyboard.addListener(hideEvent, () => {
@@ -127,6 +284,11 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setLikeCount(prev => newStatus ? prev + 1 : prev - 1); // Optimistic update
 
     await videoService.toggleLikeVideo(video.id, currentUserId, !newStatus);
+
+    // Notify parent component of like change
+    if (onLikeChange) {
+      onLikeChange(video.id, newStatus);
+    }
   };
 
   const handleSave = async () => {
@@ -136,6 +298,58 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     setSaveCount(prev => newStatus ? prev + 1 : prev - 1);
 
     await videoService.toggleSaveVideo(video.id, currentUserId, isSaved);
+
+    // Notify parent component of save change
+    if (onSaveChange) {
+      onSaveChange(video.id, newStatus);
+    }
+  };
+
+  const handleAddComment = async (text: string) => {
+    if (!currentUserId || !text.trim()) return;
+
+    const result = await videoService.addComment(
+      video.id,
+      currentUserId,
+      currentUserInfo.avatarUrl,
+      currentUserInfo.username,
+      text
+    );
+
+    if (result.success && result.comment) {
+      setComments([result.comment, ...comments]);
+      setCommentCount(prev => prev + 1);
+      console.log('Comment added:', result.comment);
+      // Notify parent to refresh videos from database
+      onCommentAdded?.(video.id);
+    }
+  };
+
+  const handleLikeComment = async (commentId: string, isLiked: boolean) => {
+    if (!currentUserId) return;
+
+    // Optimistic update
+    setComments(comments.map(c =>
+      c.id === commentId
+        ? {
+          ...c,
+          likesCount: (c.likesCount || 0) + (isLiked ? -1 : 1),
+          isLiked: !isLiked
+        }
+        : c
+    ));
+
+    const result = await videoService.toggleLikeComment(
+      video.id,
+      commentId,
+      currentUserId,
+      isLiked
+    );
+
+    if (!result.success) {
+      // Revert on error
+      fetchComments();
+    }
   };
 
   const handleReportSubmit = async () => {
@@ -160,41 +374,6 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     } else {
       Alert.alert('Error', result.error || 'Failed to submit report');
     }
-  };
-
-  // Handle Comment Report
-  const handleCommentReportSubmit = async () => {
-    if (!currentUserId || !commentReportReason || !selectedComment) {
-      Alert.alert('Lỗi', 'Vui lòng chọn lý do báo cáo');
-      return;
-    }
-
-    const result = await reportService.submitCommentReport(
-      selectedComment.id,
-      video.id,
-      currentUserId,
-      video.ownerName, // Reporter name
-      selectedComment.text,
-      selectedComment.userUid,
-      selectedComment.user,
-      commentReportReason,
-      commentReportDetails
-    );
-
-    if (result.success) {
-      Alert.alert('Thành công', 'Báo cáo đã được gửi. Cảm ơn bạn đã giúp cộng đồng an toàn hơn.');
-      setShowCommentReportModal(false);
-      setSelectedComment(null);
-      setCommentReportReason(null);
-      setCommentReportDetails('');
-    } else {
-      Alert.alert('Lỗi', result.error || 'Không thể gửi báo cáo');
-    }
-  };
-
-  const openCommentReportModal = (comment: { id: string; user: string; userUid: string; text: string }) => {
-    setSelectedComment(comment);
-    setShowCommentReportModal(true);
   };
 
   const reportReasons = [
@@ -235,6 +414,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           resizeMode="cover"
           repeat={true}
           paused={!isActive || isPaused}
+          muted={!!video.soundAudioUrl} // Mute video gốc nếu có nhạc nền
           playInBackground={false}
           playWhenInactive={false}
           onProgress={handleProgress}
@@ -296,7 +476,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
 
           <TouchableOpacity style={styles.action} onPress={() => setShowComments(true)}>
             <MessageCircle size={35} color="#fff" />
-            <Text style={styles.actionText}>{video.commentsCount}</Text>
+            <Text style={styles.actionText}>{commentCount}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.action} onPress={handleSave}>
@@ -317,7 +497,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </TouchableOpacity>
 
           <Animated.View style={[styles.discContainer, { transform: [{ rotate: spin }] }]}>
-            <Image source={{ uri: video.ownerAvatar }} style={styles.discImg} />
+            <Image source={{ uri: video.soundThumb ? video.soundThumb : video.ownerAvatar }} style={styles.discImg} />
           </Animated.View>
         </View>
 
@@ -329,8 +509,11 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           </Text>
           <View style={styles.musicRow}>
             <Music size={14} color="#fff" />
-            <Text style={styles.musicText}>{video.ownerName}</Text>
+            <Text style={styles.musicText} numberOfLines={1}>
+              {video.soundName ? video.soundName : `Original sound - ${video.ownerName}`}
+            </Text>
           </View>
+          <Text style={styles.viewCount}>{(video.viewCount || 0).toLocaleString()} views</Text>
         </View>
 
         {/* THANH TIẾN TRÌNH (Sát đáy) */}
@@ -394,7 +577,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
                   onFocus={() => {
                     setTimeout(() => {
                       reportScrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 100);
+                    }, 300);
                   }}
                 />
               </View>
@@ -426,159 +609,101 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
         </View>
       )}
 
-      {/* MODAL COMMENT GIẢ LẬP */}
+      {/* MODAL COMMENT */}
       {showComments && (
-        <View style={styles.commentModal}>
-          <View style={styles.commentHeader}>
-            <Text style={styles.commentTitle}>{comments.length} comments</Text>
-            <TouchableOpacity onPress={() => setShowComments(false)}>
-              <X size={24} color="#000" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.commentList}>
-            {comments.map((c) => (
-              <View key={c.id} style={styles.commentItem}>
-                <View style={styles.commentAvatar} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.commentUser}>{c.user}</Text>
-                  <Text style={styles.commentContent}>{c.text}</Text>
-                  <View style={styles.commentMeta}>
-                    <Text style={styles.commentTime}>2h ago</Text>
-                    <Text style={styles.commentReply}>Reply</Text>
-                  </View>
-                </View>
-                <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
-                  <TouchableOpacity onPress={() => openCommentReportModal(c)}>
-                    <Flag size={14} color="#999" />
-                  </TouchableOpacity>
-                  <View style={{ alignItems: 'center' }}>
-                    <Heart size={16} color="#ccc" />
-                    <Text style={{ fontSize: 10, color: '#888' }}>{c.likes}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
+        <Modal
+          visible={showComments}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowComments(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowComments(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+          </TouchableWithoutFeedback>
 
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Add comment..."
-                value={commentText}
-                onChangeText={setCommentText}
-              />
-              <TouchableOpacity onPress={() => {
-                if (commentText.trim()) {
-                  setComments([...comments, { id: Date.now().toString(), user: 'you', userUid: currentUserId || 'unknown', text: commentText, likes: 0 }]);
-                  setCommentText('');
-                }
-              }}>
-                <Send size={24} color="#fe2c55" />
+          <View style={styles.commentModal}>
+            <View style={styles.commentHeader}>
+              <Text style={styles.commentTitle}>{comments.length} comments</Text>
+              <TouchableOpacity onPress={() => setShowComments(false)}>
+                <X size={24} color="#000" />
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </View>
-      )}
 
-      {/* COMMENT REPORT MODAL */}
-      {showCommentReportModal && (
-        <View style={styles.reportModal}>
-          <View style={styles.reportHeader}>
-            <Text style={styles.reportTitle}>Báo cáo bình luận</Text>
-            <TouchableOpacity onPress={() => {
-              setShowCommentReportModal(false);
-              setSelectedComment(null);
-              setCommentReportReason(null);
-              setCommentReportDetails('');
-            }}>
-              <X size={24} color="#000" />
-            </TouchableOpacity>
-          </View>
-
-          {selectedComment && (
-            <View style={styles.reportedCommentPreview}>
-              <Text style={styles.reportedCommentUser}>@{selectedComment.user}</Text>
-              <Text style={styles.reportedCommentText} numberOfLines={2}>"{selectedComment.text}"</Text>
-            </View>
-          )}
-
-          <ScrollView
-            ref={commentReportScrollViewRef}
-            style={styles.reportContent}
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={true}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 20 }}
-          >
-            <Text style={styles.reportSubtitle}>Tại sao bạn báo cáo bình luận này?</Text>
-
-            {reportReasons.map((reason) => (
-              <TouchableOpacity
-                key={reason.value}
-                style={[
-                  styles.reportReasonItem,
-                  commentReportReason === reason.value && styles.reportReasonSelected
-                ]}
-                onPress={() => setCommentReportReason(reason.value)}
-              >
-                <View style={[
-                  styles.radioButton,
-                  commentReportReason === reason.value && styles.radioButtonSelected
-                ]}>
-                  {commentReportReason === reason.value && (
-                    <View style={styles.radioButtonInner} />
-                  )}
+            <ScrollView style={styles.commentList}>
+              {loadingComments ? (
+                <View style={{ alignItems: 'center', marginTop: 20 }}>
+                  <ActivityIndicator size="large" color="#fe2c55" />
                 </View>
-                <Text style={styles.reportReasonText}>{reason.label}</Text>
-              </TouchableOpacity>
-            ))}
+              ) : comments.length === 0 ? (
+                <View style={{ alignItems: 'center', marginTop: 20 }}>
+                  <Text style={{ color: '#888' }}>No comments yet</Text>
+                </View>
+              ) : (
+                comments.map((c) => (
+                  <View key={c.id} style={styles.commentItem}>
+                    {c.avatarUrl ? (
+                      <Image
+                        source={{ uri: c.avatarUrl }}
+                        style={styles.commentAvatar}
+                      />
+                    ) : (
+                      <View style={[styles.commentAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#ddd' }]}>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#666' }}>
+                          {c.username?.charAt(0).toUpperCase() || 'U'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.commentUser}>{c.username}</Text>
+                      <Text style={styles.commentContent}>{c.text}</Text>
+                      <View style={styles.commentMeta}>
+                        <Text style={styles.commentTime}>
+                          {new Date(c.timestamp).toLocaleDateString()}
+                        </Text>
+                        <Text style={styles.commentReply}>Reply</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={{ alignItems: 'center' }}
+                      onPress={() => handleLikeComment(c.id, c.isLiked || false)}
+                    >
+                      <Heart
+                        size={16}
+                        color={c.isLiked ? '#fe2c55' : '#ccc'}
+                        fill={c.isLiked ? '#fe2c55' : 'none'}
+                      />
+                      <Text style={{ fontSize: 10, color: '#888' }}>
+                        {c.likesCount || 0}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
 
-            {commentReportReason === ReportReason.OTHER && (
-              <View style={styles.reportDetailsContainer}>
-                <Text style={styles.reportDetailsLabel}>Vui lòng cung cấp thêm chi tiết:</Text>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'position' : 'height'}
+              keyboardVerticalOffset={0}
+            >
+              <View style={styles.inputContainer}>
                 <TextInput
-                  style={styles.reportDetailsInput}
-                  placeholder="Mô tả vấn đề..."
-                  value={commentReportDetails}
-                  onChangeText={setCommentReportDetails}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  onFocus={() => {
-                    setTimeout(() => {
-                      commentReportScrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 100);
-                  }}
+                  style={styles.input}
+                  placeholder="Add comment..."
+                  value={commentText}
+                  onChangeText={setCommentText}
                 />
+                <TouchableOpacity onPress={() => {
+                  if (commentText.trim() && currentUserInfo) {
+                    handleAddComment(commentText);
+                    setCommentText('');
+                  }
+                }}>
+                  <Send size={24} color="#fe2c55" />
+                </TouchableOpacity>
               </View>
-            )}
-          </ScrollView>
-
-          <View style={styles.reportActions}>
-            <TouchableOpacity
-              style={styles.reportCancelButton}
-              onPress={() => {
-                setShowCommentReportModal(false);
-                setSelectedComment(null);
-                setCommentReportReason(null);
-                setCommentReportDetails('');
-              }}
-            >
-              <Text style={styles.reportCancelText}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.reportSubmitButton,
-                !commentReportReason && styles.reportSubmitButtonDisabled
-              ]}
-              onPress={handleCommentReportSubmit}
-              disabled={!commentReportReason}
-            >
-              <Text style={styles.reportSubmitText}>Gửi báo cáo</Text>
-            </TouchableOpacity>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </Modal>
       )}
     </View>
   );
@@ -612,13 +737,14 @@ const styles = StyleSheet.create({
   hashtag: { fontWeight: 'bold' },
   musicRow: { flexDirection: 'row', alignItems: 'center' },
   musicText: { color: '#fff', marginLeft: 8 },
+  viewCount: { color: '#fff', fontSize: 12, marginTop: 4, opacity: 0.8 },
 
   // Progress Bar
   progressBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
   progressBar: { height: '100%', backgroundColor: '#fff' },
 
   // Comments
-  commentModal: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%', backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12, zIndex: 100 },
+  commentModal: { height: '60%', backgroundColor: '#fff', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
   commentHeader: { padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 0.5, borderColor: '#eee' },
   commentTitle: { fontWeight: 'bold', fontSize: 14 },
   commentList: { flex: 1 },
@@ -653,8 +779,4 @@ const styles = StyleSheet.create({
   reportSubmitButton: { flex: 1, paddingVertical: 14, borderRadius: 8, backgroundColor: '#fe2c55', alignItems: 'center' },
   reportSubmitButtonDisabled: { backgroundColor: '#ccc' },
   reportSubmitText: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  // Comment Report Preview
-  reportedCommentPreview: { backgroundColor: '#f8f8f8', padding: 12, marginHorizontal: 16, marginTop: 8, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#fe2c55' },
-  reportedCommentUser: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4 },
-  reportedCommentText: { fontSize: 13, color: '#666', fontStyle: 'italic' },
 });

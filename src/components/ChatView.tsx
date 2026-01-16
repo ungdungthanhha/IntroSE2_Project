@@ -3,19 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
 import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, Send, Bell } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Chat, Message, User } from '../types/type';
+import { Chat, Message, User, Video as VideoType } from '../types/type';
 import * as chatService from '../services/chatService';
 import * as userService from '../services/userService';
+import * as notificationService from '../services/notificationService';
 import ActivityView from './ActivityView';
 
 interface ChatViewProps {
   onChatDetailChange?: (isInDetail: boolean) => void;
   currentUser: User;
+  onSelectUser: (user: Partial<User>) => void;
+  onSelectVideo: (video: VideoType) => void;
 }
 
 type InboxTab = 'activity' | 'messages';
 
-const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) => {
+const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, onSelectUser, onSelectVideo }) => {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<InboxTab>('messages');
@@ -25,6 +28,7 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
   const [input, setInput] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingChats, setLoadingChats] = useState(true);
+  const [unreadNotiCount, setUnreadNotiCount] = useState(0);
 
   // Notify parent when entering/leaving chat detail
   // Hide bottom nav only when: in chat conversation OR in activity page
@@ -75,6 +79,16 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
     return () => unsub && unsub();
   }, [selectedChat]);
 
+  // Subscribe to notifications for badge
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsubscribe = notificationService.getNotifications(currentUser.uid, (list) => {
+      const unread = list.filter(n => !n.isRead).length;
+      setUnreadNotiCount(unread);
+    });
+    return () => unsubscribe();
+  }, [currentUser?.uid]);
+
   const handleSend = async () => {
     if (!selectedChat) return;
     const text = input.trim();
@@ -102,7 +116,14 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
 
   // Activity View
   if (activeTab === 'activity') {
-    return <ActivityView onBack={() => setActiveTab('messages')} />;
+    return (
+      <ActivityView
+        currentUser={currentUser}
+        onBack={() => setActiveTab('messages')}
+        onSelectUser={onSelectUser}
+        onSelectVideo={onSelectVideo}
+      />
+    );
   }
 
   // Chat Conversation View
@@ -186,7 +207,14 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser }) 
       {/* Header */}
       <View style={styles.messagesHeader}>
         <TouchableOpacity onPress={() => setActiveTab('activity')} style={styles.headerBtn}>
-          <Bell color="#000" size={22} />
+          <View>
+            <Bell color="#000" size={22} />
+            {unreadNotiCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unreadNotiCount > 99 ? '99+' : unreadNotiCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
         <Text style={styles.messagesTitle}>Direct messages</Text>
         <TouchableOpacity style={styles.headerBtn}>
@@ -254,6 +282,25 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#000',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#fe2c55',
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 
   // Chat Header

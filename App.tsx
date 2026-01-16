@@ -10,6 +10,7 @@ import auth from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { db, COLLECTIONS } from './src/config/firebase';
 import * as videoService from './src/services/videoService';
+import * as notificationService from './src/services/notificationService';
 
 import VideoItem from './src/components/VideoItem';
 import BottomNav from './src/components/BottomNav';
@@ -60,6 +61,8 @@ const AppContent = () => {
   // Screen Time State
   const [isTimeLimitReached, setIsTimeLimitReached] = useState(false);
   const [isTimeLimitIgnored, setIsTimeLimitIgnored] = useState(false);
+
+  const [unreadNotiCount, setUnreadNotiCount] = useState(0);
 
   // --- LOGIC DATABASE & AUTH (GIỮ NGUYÊN) ---
   const ensureUserDoc = async (user: any): Promise<boolean> => {
@@ -180,10 +183,23 @@ const AppContent = () => {
     fetchVideos();
   }, [currentUser?.uid]);
 
+  // Subscribe to notifications for badge
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setUnreadNotiCount(0);
+      return;
+    }
+    const unsubscribe = notificationService.getNotifications(currentUser.uid, (list) => {
+      const unread = list.filter(n => !n.isRead).length;
+      setUnreadNotiCount(unread);
+    });
+    return () => unsubscribe();
+  }, [currentUser?.uid]);
+
   // Fetch My Videos
   useEffect(() => {
     if (currentUser?.uid) {
-      videoService.getVideosByUser(currentUser.uid).then(setMyVideos);
+      videoService.getVideosByUser(currentUser.uid, currentUser.uid).then(setMyVideos);
     }
   }, [currentUser?.uid, activeTab === AppTab.PROFILE]);
 
@@ -191,9 +207,9 @@ const AppContent = () => {
   useEffect(() => {
     if (viewingProfile?.uid) {
       setOtherVideos([]); // Clear old data
-      videoService.getVideosByUser(viewingProfile.uid).then(setOtherVideos);
+      videoService.getVideosByUser(viewingProfile.uid, currentUser?.uid).then(setOtherVideos);
     }
-  }, [viewingProfile?.uid]);
+  }, [viewingProfile?.uid, currentUser?.uid]);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) setActiveVideoIndex(viewableItems[0].index || 0);
@@ -319,6 +335,9 @@ const AppContent = () => {
                                 pushScreen('profile');
                               }}
                               currentUserId={currentUser?.uid} // Pass currentUserId
+                              onLikeChange={() => fetchVideos(false)} // Refresh videos when user likes
+                              onSaveChange={() => fetchVideos(false)} // Refresh videos when user saves
+                              onCommentAdded={() => fetchVideos(false)} // Refresh videos when user comments
                             />
                           )}
                           snapToInterval={ACTUAL_VIDEO_HEIGHT}
@@ -347,7 +366,14 @@ const AppContent = () => {
 
                 {activeTab === AppTab.LIVE && <LiveView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} />}
                 {activeTab === AppTab.UPLOAD && <UploadView onClose={() => setActiveTab(AppTab.HOME)} currentUser={currentUser} onPost={async () => { await fetchVideos(); if (currentUser?.uid) videoService.getVideosByUser(currentUser.uid).then(setMyVideos); setActiveTab(AppTab.HOME); }} />}
-                {activeTab === AppTab.INBOX && <ChatView onChatDetailChange={setIsInChatDetail} currentUser={currentUser!} />}
+                {activeTab === AppTab.INBOX && (
+                  <ChatView
+                    onChatDetailChange={setIsInChatDetail}
+                    currentUser={currentUser!}
+                    onSelectUser={handleSelectSearchedUser}
+                    onSelectVideo={handleSelectSearchedVideo}
+                  />
+                )}
 
                 {/* Khi bấm Tab Profile chính chủ */}
                 {activeTab === AppTab.PROFILE && currentUser && (
@@ -374,7 +400,10 @@ const AppContent = () => {
                           : v
                       ));
                     }}
-                    onSelectVideo={handleSelectSearchedVideo}
+                    onSelectVideo={(video) => {
+                      // Store references to ProfileView's handlers before navigating
+                      handleSelectSearchedVideo(video);
+                    }}
                     onVideoUpdate={(videoId, action) => {
                       if (action === 'delete') {
                         setMyVideos(prev => prev.filter(v => v.id !== videoId));
@@ -395,7 +424,7 @@ const AppContent = () => {
               </View>
 
               {currentScreen === 'home' && !isInChatDetail && !isProfileSubView && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
-                <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+                <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} unreadCount={unreadNotiCount} />
               )}
             </View>
           )}
@@ -430,6 +459,25 @@ const AppContent = () => {
                   pushScreen('profile');
                 }}
                 currentUserId={currentUser?.uid}
+                onLikeChange={(videoId, isLiked) => {
+                  // Call ProfileView's handler if attached to video object
+                  const handler = (selectedVideo as any).__profileViewLikeHandler;
+                  if (handler) {
+                    handler(videoId, isLiked);
+                  }
+                  // Also refresh main feed
+                  fetchVideos(false);
+                }}
+                onSaveChange={(videoId, isSaved) => {
+                  // Call ProfileView's handler if attached to video object
+                  const handler = (selectedVideo as any).__profileViewSaveHandler;
+                  if (handler) {
+                    handler(videoId, isSaved);
+                  }
+                  // Also refresh main feed
+                  fetchVideos(false);
+                }}
+                onCommentAdded={() => fetchVideos(false)} // Refresh videos when user comments
               />
               <TouchableOpacity
                 style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 9991, padding: 8 }}

@@ -9,6 +9,7 @@ import EditProfileView from './EditProfileView';
 import SettingsView from './SettingsView';
 import DigitalWellbeingView from './DigitalWellbeingView';
 import DailyScreenTimeView from './DailyScreenTimeView';
+import FollowListModal from './FollowListModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -23,8 +24,11 @@ interface ProfileViewProps {
   onMessage?: (user: User) => void;
   onSubViewChange?: (isSubView: boolean) => void;
   onUserUpdate?: (user: User) => void;
+  onCurrentUserUpdate?: (user: User) => void;
   onSelectVideo?: (video: Video) => void;
   onVideoUpdate?: (videoId: string, action: 'delete' | 'unlike' | 'unsave') => void;
+  onLikeChange?: (videoId: string, isLiked: boolean) => void;
+  onSaveChange?: (videoId: string, isSaved: boolean) => void;
 }
 
 const ProfileView: React.FC<ProfileViewProps> = ({
@@ -36,8 +40,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   onMessage,
   onSubViewChange,
   onUserUpdate,
+  onCurrentUserUpdate,
   onSelectVideo,
-  onVideoUpdate
+  onVideoUpdate,
+  onLikeChange,
+  onSaveChange
 }) => {
   // Use props directly instead of destructing to access onVideoUpdate in callback
   const props = { onUserUpdate, onSelectVideo, onVideoUpdate };
@@ -47,6 +54,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(currentUserData.followersCount);
+  const [totalLikes, setTotalLikes] = useState(0);
 
   // New State for Tabs
   const [likedVideos, setLikedVideos] = useState<Video[]>([]);
@@ -55,6 +63,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
   // Settings Navigation Stack
   const [settingsPath, setSettingsPath] = useState<string[]>([]);
+
+  // Follow List Modal
+  const [showFollowModal, setShowFollowModal] = useState(false);
+  const [followModalType, setFollowModalType] = useState<'Followers' | 'Following'>('Followers');
+
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -63,31 +76,84 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     }
   }, [initialUser.uid, currentUserId, isOwnProfile]);
 
+  // Fetch full user data from Firebase on mount or when uid changes
+  useEffect(() => {
+    const fetchFullUserData = async () => {
+      if (!initialUser.uid) return;
+      try {
+        const fullUserData = await userService.getUserById(initialUser.uid);
+        if (fullUserData) {
+          console.log('ProfileView - Fetched full user data from Firebase:', fullUserData);
+          setCurrentUserData(fullUserData);
+          setFollowerCount(fullUserData.followersCount || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching full user data:', error);
+        // Fallback to initialUser if fetch fails
+        setCurrentUserData(initialUser);
+        setFollowerCount(initialUser.followersCount || 0);
+      }
+    };
+
+    fetchFullUserData();
+  }, [initialUser.uid]);
+
   useEffect(() => {
     setCurrentUserData(initialUser);
     setFollowerCount(initialUser.followersCount);
+    console.log('ProfileView - initialUser:', initialUser);
   }, [initialUser]);
 
-  // Fetch videos when tab changes
+  // Sync followerCount when currentUserData changes
+  useEffect(() => {
+    setFollowerCount(currentUserData.followersCount);
+    console.log('ProfileView - currentUserData updated:', currentUserData);
+  }, [currentUserData.followersCount]);
+
+  // Calculate total likes from user's videos
+  useEffect(() => {
+    const total = userVideos.reduce((sum, video) => sum + (video.likesCount || 0), 0);
+    setTotalLikes(total);
+    console.log('ProfileView - Total likes calculated:', total);
+  }, [userVideos]);
+
+  // Fetch videos when tab changes - Always refetch to ensure fresh data and auto-remove unliked/unsaved videos
   useEffect(() => {
     const fetchTabVideos = async () => {
       if (!initialUser.uid) return;
 
-      if (activeTab === 'liked' && likedVideos.length === 0) {
+      if (activeTab === 'liked') {
         setLoadingVideos(true);
-        const vids = await videoService.getLikedVideos(initialUser.uid);
-        setLikedVideos(vids);
-        setLoadingVideos(false);
-      } else if (activeTab === 'locked' && savedVideos.length === 0) { // 'locked' tab for Saved
+        try {
+          const vids = await videoService.getLikedVideos(initialUser.uid);
+          setLikedVideos(vids);
+        } catch (error) {
+          console.error('Error fetching liked videos:', error);
+        } finally {
+          setLoadingVideos(false);
+        }
+      } else if (activeTab === 'locked') { // 'locked' tab for Saved
         setLoadingVideos(true);
-        const vids = await videoService.getSavedVideos(initialUser.uid);
-        setSavedVideos(vids);
-        setLoadingVideos(false);
+        try {
+          const vids = await videoService.getSavedVideos(initialUser.uid);
+          setSavedVideos(vids);
+        } catch (error) {
+          console.error('Error fetching saved videos:', error);
+        } finally {
+          setLoadingVideos(false);
+        }
       }
     };
 
     fetchTabVideos();
   }, [activeTab, initialUser.uid]);
+
+  // Handle video status changes (unlike/unsave) - immediately remove from gallery
+  // This is called when videos are unliked/unsaved from VideoItem detail view
+  useEffect(() => {
+    // This effect helps sync the profile view when a video's like/save status changes
+    // The primary sync happens when switching tabs (which triggers a refetch)
+  }, [likedVideos, savedVideos]);
 
   useEffect(() => {
     const backAction = () => {
@@ -200,11 +266,27 @@ const ProfileView: React.FC<ProfileViewProps> = ({
       if (isFollowing) {
         await userService.unfollowUser(currentUserId, currentUserData.uid);
         setIsFollowing(false);
-        setFollowerCount(prev => Math.max(0, prev - 1));
       } else {
         await userService.followUser(currentUserId, currentUserData.uid);
         setIsFollowing(true);
-        setFollowerCount(prev => prev + 1);
+      }
+
+      // Fetch updated user data from Firebase
+      const updatedUser = await userService.getUserById(currentUserData.uid);
+      if (updatedUser) {
+        setCurrentUserData(updatedUser);
+        setFollowerCount(updatedUser.followersCount);
+        if (onUserUpdate) onUserUpdate(updatedUser);
+        console.log('Updated user after follow toggle:', updatedUser);
+      }
+
+      // Callback to update current user's following count
+      if (onCurrentUserUpdate) {
+        const currentUser = await userService.getUserById(currentUserId);
+        if (currentUser) {
+          onCurrentUserUpdate(currentUser);
+          console.log('Updated current user:', currentUser);
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update follow status');
@@ -215,6 +297,40 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
   const handleMessage = () => {
     if (onMessage) onMessage(currentUserData);
+  };
+
+  // Handle realtime removal of videos when unliked/unsaved
+  const handleVideoLikeChange = (videoId: string, isLiked: boolean) => {
+    if (!isLiked) {
+      // Video was unliked - remove from liked gallery immediately
+      setLikedVideos(prev => prev.filter(v => v.id !== videoId));
+    }
+    // Forward to parent if provided
+    if (onLikeChange) {
+      onLikeChange(videoId, isLiked);
+    }
+  };
+
+  const handleVideoSaveChange = (videoId: string, isSaved: boolean) => {
+    if (!isSaved) {
+      // Video was unsaved - remove from saved gallery immediately
+      setSavedVideos(prev => prev.filter(v => v.id !== videoId));
+    }
+    // Forward to parent if provided
+    if (onSaveChange) {
+      onSaveChange(videoId, isSaved);
+    }
+  };
+
+  // Wrap onSelectVideo to pass handlers
+  const handleSelectVideo = (video: Video) => {
+    // Attach handlers to the video object so VideoItem can use them
+    (video as any).__profileViewLikeHandler = handleVideoLikeChange;
+    (video as any).__profileViewSaveHandler = handleVideoSaveChange;
+
+    if (onSelectVideo) {
+      onSelectVideo(video);
+    }
   };
 
   return (
@@ -276,18 +392,30 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
               {/* Stats Section */}
               <View style={styles.stats}>
-                <TouchableOpacity style={styles.statItem}>
-                  <Text style={styles.statVal}>{currentUserData.followingCount || 14}</Text>
+                <TouchableOpacity
+                  style={styles.statItem}
+                  onPress={() => {
+                    setFollowModalType('Following');
+                    setShowFollowModal(true);
+                  }}
+                >
+                  <Text style={styles.statVal}>{currentUserData.followingCount || 0}</Text>
                   <Text style={styles.statLab}>Following</Text>
                 </TouchableOpacity>
                 <View style={styles.divider} />
-                <TouchableOpacity style={styles.statItem}>
-                  <Text style={styles.statVal}>{followerCount || 38}</Text>
+                <TouchableOpacity
+                  style={styles.statItem}
+                  onPress={() => {
+                    setFollowModalType('Followers');
+                    setShowFollowModal(true);
+                  }}
+                >
+                  <Text style={styles.statVal}>{currentUserData.followersCount || 0}</Text>
                   <Text style={styles.statLab}>Followers</Text>
                 </TouchableOpacity>
                 <View style={styles.divider} />
                 <TouchableOpacity style={styles.statItem}>
-                  <Text style={styles.statVal}>91</Text>
+                  <Text style={styles.statVal}>{totalLikes || 0}</Text>
                   <Text style={styles.statLab}>Likes</Text>
                 </TouchableOpacity>
               </View>
@@ -369,11 +497,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           <TouchableOpacity
             key={video.id}
             style={styles.gridItem}
-            onPress={() => onSelectVideo && onSelectVideo(video)}
+            onPress={() => handleSelectVideo(video)}
             onLongPress={() => {
+              // ONLY allow long-press for user's own videos tab (Case 1)
+              // Disable long-press for liked and saved tabs
               if (!currentUserId) return;
 
-              // CASE 1: DELETE MY VIDEO
+              // CASE 1: DELETE MY VIDEO (Only allow this)
               if (activeTab === 'videos' && isOwnProfile && currentUserId === video.ownerUid) {
                 Alert.alert(
                   "Delete Video",
@@ -394,50 +524,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                   ]
                 );
               }
-
-              // CASE 2: REMOVE FROM LIKED
-              else if (activeTab === 'liked' && isOwnProfile) {
-                Alert.alert(
-                  "Remove from Liked",
-                  "Unlike this video?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Remove", style: "destructive", onPress: async () => {
-                        // isLiked = true -> Pass true to toggle to false
-                        const res = await videoService.toggleLikeVideo(video.id, currentUserId, true);
-                        if (res.success) {
-                          setLikedVideos(prev => prev.filter(v => v.id !== video.id));
-                        } else {
-                          Alert.alert("Error", res.error || "Failed");
-                        }
-                      }
-                    }
-                  ]
-                );
-              }
-
-              // CASE 3: REMOVE FROM SAVED (LOCKED TAB)
-              else if (activeTab === 'locked' && isOwnProfile) {
-                Alert.alert(
-                  "Remove from Saved",
-                  "Unsave this video?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Remove", style: "destructive", onPress: async () => {
-                        // isSaved = true -> Pass true to toggle to false
-                        const res = await videoService.toggleSaveVideo(video.id, currentUserId, true);
-                        if (res.success) {
-                          setSavedVideos(prev => prev.filter(v => v.id !== video.id));
-                        } else {
-                          Alert.alert("Error", res.error || "Failed");
-                        }
-                      }
-                    }
-                  ]
-                );
-              }
+              // Long-press disabled for liked and saved tabs
             }}
           >
             <Image
@@ -446,7 +533,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
               resizeMode="cover"
             />
             <View style={styles.playCountBadge}>
-              <Text style={styles.playCountText}>▷ {Math.floor(Math.random() * 1000)}</Text>
+              <Text style={styles.playCountText}>▷ {(video.viewCount || 0).toLocaleString()}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -461,6 +548,230 @@ const ProfileView: React.FC<ProfileViewProps> = ({
             </View>
           ) : null
         }
+      />
+
+      {/* Follow List Modal */}
+      <FollowListModal
+        visible={showFollowModal}
+        title={followModalType}
+        userId={currentUserData.uid}
+        onClose={() => setShowFollowModal(false)}
+        onUserPress={(user: User) => {
+          // Navigate to user profile
+          if (onSelectVideo) {
+            // Use a hack to navigate - in a real app you'd use proper navigation
+            setViewingProfile(user);
+          }
+        }}
+      />
+    </View >
+  );
+
+  // This is used to track when viewing another user's profile (for the hack above)
+  const [viewingProfile, setViewingProfile] = useState<User | null>(null);
+
+  // If viewing a profile, show that instead
+  if (viewingProfile) {
+    return (
+      <ProfileView
+        user={viewingProfile!}
+        isOwnProfile={false}
+        currentUserId={currentUserId}
+        onBack={() => setViewingProfile(null)}
+        userVideos={[]}
+        onMessage={onMessage}
+      />
+    );
+  }
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" />
+
+      <View style={styles.header}>
+        {onBack ? (
+          <TouchableOpacity onPress={onBack} style={styles.headerIconLeft}>
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+        ) : isOwnProfile ? (
+          <TouchableOpacity style={styles.headerIconLeft}>
+            <UserPlus size={24} color="#000" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={onBack} style={styles.headerIconLeft}>
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.titleWrap}>
+          <Text style={styles.username}>{currentUserData.displayName || currentUserData.username}</Text>
+          <ChevronDown size={14} color="#000" style={{ marginTop: 2 }} />
+        </View>
+
+        <View style={styles.headerRight}>
+          {isOwnProfile && !onBack ? (
+            <>
+              <TouchableOpacity onPress={() => setSettingsPath(['digital_wellbeing'])} style={styles.headerIcon}>
+                <Umbrella size={24} color="#000" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setSettingsPath(['settings'])} style={styles.headerIcon}>
+                <Menu size={24} color="#000" />
+              </TouchableOpacity>
+            </>
+          ) : !isOwnProfile ? (
+            <TouchableOpacity style={styles.headerIcon}>
+              <MoreHorizontal size={24} color="#000" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
+      <FlatList
+        data={displayVideos}
+        keyExtractor={(item) => item.id}
+        numColumns={3}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        ListHeaderComponent={
+          <>
+            <View style={styles.profileInfo}>
+              <View style={styles.avatarContainer}>
+                <Image source={{ uri: currentUserData.avatarUrl }} style={styles.avatar} />
+              </View>
+
+              <Text style={styles.handle}>@{currentUserData.username || "jacob_w"}</Text>
+
+              {/* Stats Section */}
+              <View style={styles.stats}>
+                <TouchableOpacity
+                  style={styles.statItem}
+                  onPress={() => {
+                    setFollowModalType('Following');
+                    setShowFollowModal(true);
+                  }}
+                >
+                  <Text style={styles.statVal}>{currentUserData.followingCount || 0}</Text>
+                  <Text style={styles.statLab}>Following</Text>
+                </TouchableOpacity>
+                <View style={styles.divider} />
+                <TouchableOpacity
+                  style={styles.statItem}
+                  onPress={() => {
+                    setFollowModalType('Followers');
+                    setShowFollowModal(true);
+                  }}
+                >
+                  <Text style={styles.statVal}>{currentUserData.followersCount || 0}</Text>
+                  <Text style={styles.statLab}>Followers</Text>
+                </TouchableOpacity>
+                <View style={styles.divider} />
+                <TouchableOpacity style={styles.statItem}>
+                  <Text style={styles.statVal}>{totalLikes || 0}</Text>
+                  <Text style={styles.statLab}>Likes</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actions}>
+                {isOwnProfile ? (
+                  <>
+                    <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
+                      <Text style={styles.editBtnText}>Edit profile</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.bookmarkBtn}>
+                      <Bookmark size={20} color="#000" />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.followBtn, isFollowing && styles.followingBtn]}
+                      onPress={handleFollowToggle}
+                      disabled={followLoading}
+                    >
+                      {followLoading ? (
+                        <ActivityIndicator size="small" color={isFollowing ? "#000" : "#fff"} />
+                      ) : (
+                        <>
+                          <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+                            {isFollowing ? 'Following' : 'Follow'}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
+                      <MessageCircle size={20} color="#000" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.moreBtn}>
+                      <ChevronDown size={20} color="#000" />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+
+              <Text style={styles.bio}>{currentUserData.bio || "Tap to add bio"}</Text>
+            </View>
+
+            {/* Tabs Navigation */}
+            <View style={styles.tabs}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
+                onPress={() => setActiveTab('videos')}
+              >
+                <Grid size={24} color={activeTab === 'videos' ? "#000" : "#ccc"} />
+              </TouchableOpacity>
+
+              {isOwnProfile && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.tab, activeTab === 'locked' && styles.tabActive]}
+                    onPress={() => setActiveTab('locked')}
+                  >
+                    <Bookmark size={24} color={activeTab === 'locked' ? "#000" : "#ccc"} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.tab, activeTab === 'liked' && styles.tabActive]}
+                    onPress={() => setActiveTab('liked')}
+                  >
+                    <Heart size={24} color={activeTab === 'liked' ? "#000" : "#ccc"} />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </>
+        }
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() => onSelectVideo && onSelectVideo(item)}
+            style={{ width: COL_WIDTH, aspectRatio: 9 / 16, marginBottom: 2, marginRight: 2, backgroundColor: '#f0f0f0' }}
+          >
+            {item.thumbUrl && <Image source={{ uri: item.thumbUrl }} style={{ flex: 1 }} />}
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          !loadingVideos ? (
+            <View style={{ alignItems: 'center', marginTop: 30 }}>
+              <Text style={{ color: '#999' }}>
+                {activeTab === 'liked' ? "No liked videos" :
+                  activeTab === 'locked' ? "No saved videos" :
+                    "No videos yet"}
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* Follow List Modal */}
+      <FollowListModal
+        visible={showFollowModal}
+        title={followModalType}
+        userId={currentUserData.uid}
+        onClose={() => setShowFollowModal(false)}
+        onUserPress={(user: User) => {
+          // Navigate to user profile
+          setViewingProfile(user);
+        }}
       />
     </View >
   );

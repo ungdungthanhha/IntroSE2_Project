@@ -1,6 +1,7 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Sử dụng instance db trực tiếp
 import { User } from '../types/type';
 import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '@env';
+import * as notificationService from './notificationService';
 
 
 
@@ -117,6 +118,17 @@ export const followUser = async (currentUserId: string, targetUserId: string): P
     });
 
     await batch.commit();
+
+    if (currentUserData && targetUserData) {
+      notificationService.sendNotification({
+        type: 'follow',
+        fromUserId: currentUserId,
+        fromUserName: currentUserData.username,
+        fromUserAvatar: currentUserData.avatarUrl,
+        toUserId: targetUserId,
+      });
+    }
+
     return { success: true };
   } catch (error: any) {
     console.error('Error following user:', error);
@@ -273,5 +285,61 @@ export const updateUserProfile = async (
   } catch (error: any) {
     console.error('Error updating profile:', error);
     return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Lấy danh sách followers của một user
+ */
+export const getFollowers = async (userId: string): Promise<User[]> => {
+  try {
+    const followersSnapshot = await db
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('followers')
+      .get();
+
+    const followers: User[] = [];
+
+    for (const doc of followersSnapshot.docs) {
+      const followerData = doc.data();
+      const userDoc = await getUserById(followerData.userId);
+      if (userDoc) {
+        followers.push(userDoc);
+      }
+    }
+
+    return followers;
+  } catch (error) {
+    console.error('Error getting followers:', error);
+    return [];
+  }
+};
+
+/**
+ * Lấy danh sách following của một user
+ */
+export const getFollowing = async (userId: string): Promise<User[]> => {
+  try {
+    const followingSnapshot = await db
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('following')
+      .get();
+
+    const following: User[] = [];
+
+    for (const doc of followingSnapshot.docs) {
+      const followingData = doc.data();
+      const userDoc = await getUserById(followingData.userId);
+      if (userDoc) {
+        following.push(userDoc);
+      }
+    }
+
+    return following;
+  } catch (error) {
+    console.error('Error getting following:', error);
+    return [];
   }
 };

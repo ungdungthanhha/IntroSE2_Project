@@ -1,6 +1,7 @@
 import { db, COLLECTIONS } from '../config/firebase'; // Instance db trực tiếp từ config
 import { Video, Comment } from '../types/type';
 import firestore from '@react-native-firebase/firestore';
+import * as notificationService from './notificationService';
 import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '@env';
 import { launchImageLibrary, ImageLibraryOptions, MediaType } from 'react-native-image-picker';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
@@ -11,6 +12,15 @@ import { PermissionsAndroid, Platform, Alert } from 'react-native';
 export const uploadVideoToCloudinary = async (fileUri: string) => {
   const cloudName = CLOUDINARY_CLOUD_NAME;
   const uploadPreset = CLOUDINARY_UPLOAD_PRESET;
+
+  console.log('[Cloudinary] Cloud Name:', cloudName);
+  console.log('[Cloudinary] Upload Preset:', uploadPreset);
+  console.log('[Cloudinary] File URI:', fileUri);
+
+  if (!cloudName || !uploadPreset) {
+    console.error('[Cloudinary] Missing credentials! Check .env file');
+    return null;
+  }
 
   const formData = new FormData();
   formData.append('file', {
@@ -35,6 +45,9 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
     }
 
     xhr.onload = () => {
+      console.log('[Cloudinary] Response status:', xhr.status);
+      console.log('[Cloudinary] Response body:', xhr.response);
+
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.response);
@@ -49,7 +62,7 @@ export const uploadVideoToCloudinary = async (fileUri: string) => {
           resolve(null);
         }
       } else {
-        console.error('Cloudinary Upload Failed:', xhr.response);
+        console.error('Cloudinary Upload Failed:', xhr.status, xhr.response);
         resolve(null);
       }
     };
@@ -89,14 +102,14 @@ export const saveVideoMetadata = async (videoData: Partial<Video>) => {
 /**
  * 3. Lấy danh sách TOÀN BỘ video từ Firestore (Cho màn hình Feed)
  */
-export const getAllVideos = async (): Promise<Video[]> => {
+export const getAllVideos = async (userId?: string): Promise<Video[]> => {
   try {
     const snapshot = await db
       .collection(COLLECTIONS.VIDEOS)
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => {
+    const videos = snapshot.docs.map(doc => {
       const data = doc.data();
       // Normalize createdAt to timestamp number if it's a string
       const createdAt = typeof data.createdAt === 'string'
@@ -113,6 +126,23 @@ export const getAllVideos = async (): Promise<Video[]> => {
       if (timeDiff !== 0) return timeDiff;
       return (a.ownerUid || '').localeCompare(b.ownerUid || '');
     });
+
+    // If userId provided, fetch user's liked and saved videos to mark them
+    if (userId) {
+      const likedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').get();
+      const likedVideoIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+
+      const savedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').get();
+      const savedVideoIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
+      return videos.map(video => ({
+        ...video,
+        isLiked: likedVideoIds.has(video.id),
+        isSaved: savedVideoIds.has(video.id)
+      }));
+    }
+
+    return videos;
   } catch (error) {
     console.error('Error getting videos:', error);
     return [];
@@ -120,9 +150,44 @@ export const getAllVideos = async (): Promise<Video[]> => {
 };
 
 /**
+ * NEW: Lấy chi tiết một Video bằng ID
+ */
+export const getVideoById = async (videoId: string, userId?: string): Promise<Video | null> => {
+  try {
+    const doc = await db.collection(COLLECTIONS.VIDEOS).doc(videoId).get();
+    if (!doc.exists()) return null;
+
+    const data = doc.data()!;
+    const createdAt = typeof data.createdAt === 'string'
+      ? new Date(data.createdAt).getTime()
+      : data.createdAt;
+
+    const video = {
+      id: doc.id,
+      ...data,
+      createdAt
+    } as Video;
+
+    if (userId) {
+      const [likedDoc, savedDoc] = await Promise.all([
+        db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').doc(videoId).get(),
+        db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').doc(videoId).get()
+      ]);
+      video.isLiked = likedDoc.exists();
+      video.isSaved = savedDoc.exists();
+    }
+
+    return video;
+  } catch (error) {
+    console.error('Error getting video by id:', error);
+    return null;
+  }
+};
+
+/**
  * 4. Lấy danh sách video của một USER cụ thể (Cho màn hình Profile)
  */
-export const getVideosByUser = async (userId: string): Promise<Video[]> => {
+export const getVideosByUser = async (userId: string, currentUserId?: string): Promise<Video[]> => {
   try {
     const snapshot = await db
       .collection(COLLECTIONS.VIDEOS)
@@ -130,7 +195,7 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => {
+    const videos = snapshot.docs.map(doc => {
       const data = doc.data();
       const createdAt = typeof data.createdAt === 'string'
         ? new Date(data.createdAt).getTime()
@@ -146,6 +211,25 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
       if (timeDiff !== 0) return timeDiff;
       return (a.ownerUid || '').localeCompare(b.ownerUid || '');
     });
+
+    if (currentUserId) {
+      // Fetch liked and saved video IDs for the current user to mark videos
+      const [likedSnapshot, savedSnapshot] = await Promise.all([
+        db.collection(COLLECTIONS.USERS).doc(currentUserId).collection('likedVideos').get(),
+        db.collection(COLLECTIONS.USERS).doc(currentUserId).collection('savedVideos').get()
+      ]);
+
+      const likedIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+      const savedIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
+      return videos.map(v => ({
+        ...v,
+        isLiked: likedIds.has(v.id),
+        isSaved: savedIds.has(v.id)
+      }));
+    }
+
+    return videos;
   } catch (error) {
     console.error('Error getting user videos:', error);
     return [];
@@ -185,6 +269,21 @@ export const toggleLikeVideo = async (videoId: string, userId: string, isLiked: 
       batch.update(videoRef, {
         likesCount: firestore.FieldValue.increment(1)
       });
+
+      // Gửi thông báo
+      const videoDoc = await videoRef.get();
+      const videoData = videoDoc.data() as Video;
+      if (videoData && videoData.ownerUid !== userId) {
+        notificationService.sendNotification({
+          type: 'like',
+          fromUserId: userId,
+          fromUserName: (await db.collection(COLLECTIONS.USERS).doc(userId).get()).data()?.username || 'User',
+          fromUserAvatar: (await db.collection(COLLECTIONS.USERS).doc(userId).get()).data()?.avatarUrl || '',
+          toUserId: videoData.ownerUid,
+          videoId: videoId,
+          videoThumbnail: videoData.thumbUrl || '',
+        });
+      }
     }
 
     await batch.commit();
@@ -245,7 +344,7 @@ export const deleteVideo = async (videoId: string, userId: string): Promise<{ su
 
     // Kiểm tra quyền sở hữu (Security Rule cũng sẽ chặn, nhưng check ở đây cho chắc)
     const doc = await videoRef.get();
-    if (!doc.exists) return { success: false, error: "Video not found" };
+    if (!doc.exists()) return { success: false, error: "Video not found" };
     if (doc.data()?.ownerUid !== userId) return { success: false, error: "Unauthorized" };
 
     // Xóa video (Lưu ý: Để xóa sạch hoàn toàn cần Cloud Functions để xóa recursive các subcollection likes/comments)
@@ -275,14 +374,25 @@ export const getLikedVideos = async (userId: string): Promise<Video[]> => {
     const videoPromises = videoIds.map(id => db.collection(COLLECTIONS.VIDEOS).doc(id).get());
     const videoDocs = await Promise.all(videoPromises);
 
+    // 3. Also fetch saved videos to mark them if applicable
+    const savedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').get();
+    const savedVideoIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
     return videoDocs
-      .filter(doc => doc.exists)
+      .filter(doc => doc.exists())
       .map(doc => {
         const data = doc.data()!;
         const createdAt = typeof data.createdAt === 'string'
           ? new Date(data.createdAt).getTime()
           : data.createdAt;
-        return { id: doc.id, ...data, createdAt } as Video;
+        // Mark as liked and check if also saved
+        return {
+          id: doc.id,
+          ...data,
+          createdAt,
+          isLiked: true,
+          isSaved: savedVideoIds.has(doc.id)
+        } as Video;
       })
       .sort((a, b) => {
         const timeDiff = b.createdAt - a.createdAt;
@@ -310,14 +420,25 @@ export const getSavedVideos = async (userId: string): Promise<Video[]> => {
     const videoPromises = videoIds.map(id => db.collection(COLLECTIONS.VIDEOS).doc(id).get());
     const videoDocs = await Promise.all(videoPromises);
 
+    // Also fetch liked videos to mark them if applicable
+    const likedSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').get();
+    const likedVideoIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+
     return videoDocs
-      .filter(doc => doc.exists)
+      .filter(doc => doc.exists())
       .map(doc => {
         const data = doc.data()!;
         const createdAt = typeof data.createdAt === 'string'
           ? new Date(data.createdAt).getTime()
           : data.createdAt;
-        return { id: doc.id, ...data, createdAt } as Video;
+        // Mark as saved and check if also liked
+        return {
+          id: doc.id,
+          ...data,
+          createdAt,
+          isSaved: true,
+          isLiked: likedVideoIds.has(doc.id)
+        } as Video;
       })
       .sort((a, b) => {
         const timeDiff = b.createdAt - a.createdAt;
@@ -356,6 +477,23 @@ export const addComment = async (videoId: string, userId: string, userAvatar: st
     });
 
     await batch.commit();
+
+    // Gửi thông báo
+    const videoDoc = await videoRef.get();
+    const videoData = videoDoc.data() as Video;
+    if (videoData && videoData.ownerUid !== userId) {
+      notificationService.sendNotification({
+        type: 'comment',
+        fromUserId: userId,
+        fromUserName: username,
+        fromUserAvatar: userAvatar,
+        toUserId: videoData.ownerUid,
+        videoId: videoId,
+        videoThumbnail: videoData.thumbUrl || '',
+        commentText: text,
+      });
+    }
+
     return { success: true, comment: newComment }; //
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -416,5 +554,91 @@ export const pickVideoFromGallery = async (): Promise<{ uri: string; duration: n
   } catch (error) {
     console.error('Pick Video Error:', error);
     return null;
+  }
+};
+
+/**
+ * Lấy tất cả comments của một video
+ */
+export const getVideoComments = async (videoId: string, userId?: string): Promise<Comment[]> => {
+  try {
+    const commentsSnapshot = await db
+      .collection(COLLECTIONS.VIDEOS)
+      .doc(videoId)
+      .collection('comments')
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    const comments: Comment[] = [];
+
+    for (const doc of commentsSnapshot.docs) {
+      const commentData = doc.data() as Comment;
+
+      // Check if current user liked this comment
+      if (userId) {
+        const likeDoc = await doc.ref.collection('likes').doc(userId).get();
+        commentData.isLiked = likeDoc.exists();
+      }
+
+      comments.push(commentData);
+    }
+
+    return comments;
+  } catch (error) {
+    console.error('Error getting comments:', error);
+    return [];
+  }
+};
+
+/**
+ * Like/Unlike a comment
+ */
+export const toggleLikeComment = async (videoId: string, commentId: string, userId: string, isLiked: boolean) => {
+  try {
+    const commentRef = db
+      .collection(COLLECTIONS.VIDEOS)
+      .doc(videoId)
+      .collection('comments')
+      .doc(commentId);
+
+    const likeRef = commentRef.collection('likes').doc(userId);
+    const batch = db.batch();
+
+    if (isLiked) {
+      // Unlike - remove the like
+      batch.delete(likeRef);
+      batch.update(commentRef, {
+        likesCount: firestore.FieldValue.increment(-1)
+      });
+    } else {
+      // Like - add the like
+      batch.set(likeRef, {
+        userId,
+        createdAt: new Date().toISOString()
+      });
+      batch.update(commentRef, {
+        likesCount: firestore.FieldValue.increment(1)
+      });
+    }
+
+    await batch.commit();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error toggling comment like:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 12. Track Video View - Increment viewCount
+ */
+export const trackVideoView = async (videoId: string): Promise<void> => {
+  try {
+    const videoRef = db.collection(COLLECTIONS.VIDEOS).doc(videoId);
+    await videoRef.update({
+      viewCount: firestore.FieldValue.increment(1)
+    });
+  } catch (error) {
+    console.error('Error tracking video view:', error);
   }
 };

@@ -14,4 +14,5 @@ export const COLLECTIONS = {
   LIVESTREAMS: 'livestreams',
   REPORTS: 'reports',
   COMMENT_REPORTS: 'comment_reports',
+  NOTIFICATIONS: 'notifications',
 };

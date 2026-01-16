@@ -14,6 +14,20 @@ export interface User {
   youtubeHandle?: string;
 }
 
+export interface Notification {
+  id: string;
+  type: 'like' | 'comment' | 'follow';
+  fromUserId: string;
+  fromUserName: string;
+  fromUserAvatar: string;
+  toUserId: string;
+  videoId?: string;
+  videoThumbnail?: string;
+  commentText?: string;
+  timestamp: number;
+  isRead: boolean;
+}
+
 export interface Video {
   id: string;
   ownerUid: string;
@@ -24,10 +38,30 @@ export interface Video {
   likesCount: number;
   commentsCount: number;
   savesCount: number;
+  viewCount: number;
   createdAt: number;
   isLiked?: boolean;
   isSaved?: boolean;
   thumbUrl?: string;
+  // Thông tin Sound gắn kèm
+  soundId: string;
+  soundName: string;
+  soundThumb: string;
+  soundAudioUrl?: string | null; // Link audio để phát song song với video
+}
+
+export interface Sound {
+  id: string;
+  name: string;             // Tên hiển thị
+  ownerUid: string;         // 'apple_music' hoặc uid của user
+  ownerName: string;        // Tên ca sĩ hoặc username
+  ownerAvatar: string;
+  audioUrl: string;         // Link mp3/preview
+  thumbnailUrl: string;
+  usageCount: number;
+  createdAt: number;
+  isSystemSound?: boolean;  // True nếu là nhạc iTunes
+  originalVideoId?: string; // Nếu là Original Sound, lưu ID video gốc
 }
 
 export interface Comment {
@@ -38,6 +72,8 @@ export interface Comment {
   avatarUrl: string;
   text: string;
   timestamp: number;
+  likesCount?: number;
+  isLiked?: boolean;
 }
 
 export interface Message {
@@ -103,21 +139,6 @@ export interface Report {
   videoId: string;
   reportedBy: string;        // User ID who reported
   reporterName: string;       // Username for display
-  reason: ReportReason;
-  additionalInfo?: string;    // Optional additional details
-  timestamp: number;
-  status: 'pending' | 'reviewed' | 'dismissed';
-}
-
-export interface CommentReport {
-  id: string;
-  commentId: string;          // ID of the reported comment
-  videoId: string;            // ID of the video containing comment
-  reportedBy: string;         // User ID who reported
-  reporterName: string;       // Username for display
-  commentText: string;        // Comment content (stored for admin review if comment deleted)
-  commentOwnerUid: string;    // User ID of comment author
-  commentOwnerName: string;   // Username of comment author
   reason: ReportReason;
   additionalInfo?: string;    // Optional additional details
   timestamp: number;
