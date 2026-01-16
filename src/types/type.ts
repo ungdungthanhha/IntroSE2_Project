@@ -82,6 +82,7 @@ export interface Message {
   senderId: string;
   text: string;
   timestamp: number;
+  deletedFor?: string[]; // Array of user UIDs who deleted this message for themselves
 }
 
 export interface Chat {
@@ -90,6 +91,9 @@ export interface Chat {
   lastMessage: string;
   timestamp: number;
   otherUser: Partial<User>;
+  unreadCounts?: Record<string, number>;
+  deletedBy?: string[]; // Array of user UIDs who deleted this chat
+  clearedTimestamps?: Record<string, number>; // Map of userId -> timestamp when they cleared history
 }
 // ...existing code...
 

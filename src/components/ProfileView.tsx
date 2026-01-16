@@ -63,11 +63,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
   // Settings Navigation Stack
   const [settingsPath, setSettingsPath] = useState<string[]>([]);
-  
+
   // Follow List Modal
   const [showFollowModal, setShowFollowModal] = useState(false);
   const [followModalType, setFollowModalType] = useState<'Followers' | 'Following'>('Followers');
-  
+
+  // This is used to track when viewing another user's profile (recursive)
+  const [viewingProfile, setViewingProfile] = useState<User | null>(null);
+
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -94,7 +97,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         setFollowerCount(initialUser.followersCount || 0);
       }
     };
-    
+
     fetchFullUserData();
   }, [initialUser.uid]);
 
@@ -206,6 +209,25 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     return `https://picsum.photos/seed/${video.id}/300/400`;
   };
 
+  if (viewingProfile) {
+    return (
+      <ProfileView
+        user={viewingProfile as User}
+        isOwnProfile={false}
+        currentUserId={currentUserId}
+        onBack={() => setViewingProfile(null)}
+        userVideos={[]}
+        onMessage={onMessage}
+        // Pass essential handlers recursively
+        onUserUpdate={onUserUpdate}
+        onSelectVideo={onSelectVideo}
+        onVideoUpdate={onVideoUpdate}
+        onLikeChange={onLikeChange}
+        onSaveChange={onSaveChange}
+      />
+    );
+  }
+
   if (isEditing) {
     return (
       <EditProfileView
@@ -270,7 +292,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         await userService.followUser(currentUserId, currentUserData.uid);
         setIsFollowing(true);
       }
-      
+
       // Fetch updated user data from Firebase
       const updatedUser = await userService.getUserById(currentUserData.uid);
       if (updatedUser) {
@@ -279,7 +301,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         if (onUserUpdate) onUserUpdate(updatedUser);
         console.log('Updated user after follow toggle:', updatedUser);
       }
-      
+
       // Callback to update current user's following count
       if (onCurrentUserUpdate) {
         const currentUser = await userService.getUserById(currentUserId);
@@ -296,6 +318,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleMessage = () => {
+    console.log("ProfileView: handleMessage called", currentUserData);
     if (onMessage) onMessage(currentUserData);
   };
 
@@ -327,7 +350,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     // Attach handlers to the video object so VideoItem can use them
     (video as any).__profileViewLikeHandler = handleVideoLikeChange;
     (video as any).__profileViewSaveHandler = handleVideoSaveChange;
-    
+
     if (onSelectVideo) {
       onSelectVideo(video);
     }
@@ -395,6 +418,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                 <TouchableOpacity
                   style={styles.statItem}
                   onPress={() => {
+                    console.log("ProfileView: Clicked Following");
                     setFollowModalType('Following');
                     setShowFollowModal(true);
                   }}
@@ -406,6 +430,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                 <TouchableOpacity
                   style={styles.statItem}
                   onPress={() => {
+                    console.log("ProfileView: Clicked Followers");
                     setFollowModalType('Followers');
                     setShowFollowModal(true);
                   }}
@@ -558,224 +583,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         onClose={() => setShowFollowModal(false)}
         onUserPress={(user) => {
           // Navigate to user profile
-          if (onSelectVideo) {
-            // Use a hack to navigate - in a real app you'd use proper navigation
-            setViewingProfile(user);
-          }
-        }}
-      />
-    </View >
-  );
-
-  // This is used to track when viewing another user's profile (for the hack above)
-  const [viewingProfile, setViewingProfile] = useState<User | null>(null);
-
-  // If viewing a profile, show that instead
-  if (viewingProfile) {
-    return (
-      <ProfileView
-        user={viewingProfile}
-        isOwnProfile={false}
-        currentUserId={currentUserId}
-        onBack={() => setViewingProfile(null)}
-        userVideos={[]}
-        onMessage={onMessage}
-      />
-    );
-  }
-
-  return (
-    <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" />
-
-      <View style={styles.header}>
-        {onBack ? (
-          <TouchableOpacity onPress={onBack} style={styles.headerIconLeft}>
-            <ArrowLeft size={24} color="#000" />
-          </TouchableOpacity>
-        ) : isOwnProfile ? (
-          <TouchableOpacity style={styles.headerIconLeft}>
-            <UserPlus size={24} color="#000" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity onPress={onBack} style={styles.headerIconLeft}>
-            <ArrowLeft size={24} color="#000" />
-          </TouchableOpacity>
-        )}
-
-        <View style={styles.titleWrap}>
-          <Text style={styles.username}>{currentUserData.displayName || currentUserData.username}</Text>
-          <ChevronDown size={14} color="#000" style={{ marginTop: 2 }} />
-        </View>
-
-        <View style={styles.headerRight}>
-          {isOwnProfile && !onBack ? (
-            <>
-              <TouchableOpacity onPress={() => setSettingsPath(['digital_wellbeing'])} style={styles.headerIcon}>
-                <Umbrella size={24} color="#000" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setSettingsPath(['settings'])} style={styles.headerIcon}>
-                <Menu size={24} color="#000" />
-              </TouchableOpacity>
-            </>
-          ) : !isOwnProfile ? (
-            <TouchableOpacity style={styles.headerIcon}>
-              <MoreHorizontal size={24} color="#000" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-
-      <FlatList
-        data={displayVideos}
-        keyExtractor={(item) => item.id}
-        numColumns={3}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 80 }}
-        ListHeaderComponent={
-          <>
-            <View style={styles.profileInfo}>
-              <View style={styles.avatarContainer}>
-                <Image source={{ uri: currentUserData.avatarUrl }} style={styles.avatar} />
-              </View>
-
-              <Text style={styles.handle}>@{currentUserData.username || "jacob_w"}</Text>
-
-              {/* Stats Section */}
-              <View style={styles.stats}>
-                <TouchableOpacity
-                  style={styles.statItem}
-                  onPress={() => {
-                    setFollowModalType('Following');
-                    setShowFollowModal(true);
-                  }}
-                >
-                  <Text style={styles.statVal}>{currentUserData.followingCount || 0}</Text>
-                  <Text style={styles.statLab}>Following</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-                <TouchableOpacity
-                  style={styles.statItem}
-                  onPress={() => {
-                    setFollowModalType('Followers');
-                    setShowFollowModal(true);
-                  }}
-                >
-                  <Text style={styles.statVal}>{currentUserData.followersCount || 0}</Text>
-                  <Text style={styles.statLab}>Followers</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-                <TouchableOpacity style={styles.statItem}>
-                  <Text style={styles.statVal}>{totalLikes || 0}</Text>
-                  <Text style={styles.statLab}>Likes</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.actions}>
-                {isOwnProfile ? (
-                  <>
-                    <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
-                      <Text style={styles.editBtnText}>Edit profile</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.bookmarkBtn}>
-                      <Bookmark size={20} color="#000" />
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.followBtn, isFollowing && styles.followingBtn]}
-                      onPress={handleFollowToggle}
-                      disabled={followLoading}
-                    >
-                      {followLoading ? (
-                        <ActivityIndicator size="small" color={isFollowing ? "#000" : "#fff"} />
-                      ) : (
-                        <>
-                          <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-                            {isFollowing ? 'Following' : 'Follow'}
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
-                      <MessageCircle size={20} color="#000" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.moreBtn}>
-                      <ChevronDown size={20} color="#000" />
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-
-              <Text style={styles.bio}>{currentUserData.bio || "Tap to add bio"}</Text>
-            </View>
-
-            {/* Tabs Navigation */}
-            <View style={styles.tabs}>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
-                onPress={() => setActiveTab('videos')}
-              >
-                <Grid size={24} color={activeTab === 'videos' ? "#000" : "#ccc"} />
-              </TouchableOpacity>
-
-              {isOwnProfile && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.tab, activeTab === 'locked' && styles.tabActive]}
-                    onPress={() => setActiveTab('locked')}
-                  >
-                    <Bookmark size={24} color={activeTab === 'locked' ? "#000" : "#ccc"} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.tab, activeTab === 'liked' && styles.tabActive]}
-                    onPress={() => setActiveTab('liked')}
-                  >
-                    <Heart size={24} color={activeTab === 'liked' ? "#000" : "#ccc"} />
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </>
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            onPress={() => onSelectVideo && onSelectVideo(item)}
-            style={{ width: COL_WIDTH, aspectRatio: 9 / 16, marginBottom: 2, marginRight: 2, backgroundColor: '#f0f0f0' }}
-          >
-            {item.thumbUrl && <Image source={{ uri: item.thumbUrl }} style={{ flex: 1 }} />}
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          !loadingVideos ? (
-            <View style={{ alignItems: 'center', marginTop: 30 }}>
-              <Text style={{ color: '#999' }}>
-                {activeTab === 'liked' ? "No liked videos" :
-                  activeTab === 'locked' ? "No saved videos" :
-                    "No videos yet"}
-              </Text>
-            </View>
-          ) : null
-        }
-      />
-
-      {/* Follow List Modal */}
-      <FollowListModal
-        visible={showFollowModal}
-        title={followModalType}
-        userId={currentUserData.uid}
-        onClose={() => setShowFollowModal(false)}
-        onUserPress={(user) => {
-          // Navigate to user profile
           setViewingProfile(user);
         }}
       />
     </View >
   );
 };
+
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },

@@ -12,7 +12,12 @@ export const getUserById = async (userId: string): Promise<User | null> => {
   try {
     // Sửa lỗi: Sử dụng db.collection thay vì db()
     const userDoc = await db.collection(COLLECTIONS.USERS).doc(userId).get();
-    if (userDoc.exists()) {
+    // Check exists as property OR function for compatibility
+    // @ts-ignore
+    const exists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
+    console.log(`[userService] getUserById ${userId} exists:`, exists);
+
+    if (exists) {
       return userDoc.data() as User;
     }
     return null;
@@ -340,6 +345,38 @@ export const getFollowing = async (userId: string): Promise<User[]> => {
     return following;
   } catch (error) {
     console.error('Error getting following:', error);
+    return [];
+  }
+};
+
+/**
+ * Lấy danh sách bạn bè (Mutual Follows)
+ */
+export const getFriends = async (userId: string): Promise<User[]> => {
+  try {
+    const followingSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('following').get();
+    const followersSnapshot = await db.collection(COLLECTIONS.USERS).doc(userId).collection('followers').get();
+
+    const followingIds = new Set(followingSnapshot.docs.map(doc => doc.id));
+    const friendIds: string[] = [];
+
+    followersSnapshot.docs.forEach(doc => {
+      if (followingIds.has(doc.id)) {
+        friendIds.push(doc.id);
+      }
+    });
+
+    const friends: User[] = [];
+    for (const friendId of friendIds) {
+      const userDoc = await getUserById(friendId);
+      if (userDoc) {
+        friends.push(userDoc);
+      }
+    }
+
+    return friends;
+  } catch (error) {
+    console.error('Error getting friends:', error);
     return [];
   }
 };

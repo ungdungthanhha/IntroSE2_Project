@@ -11,6 +11,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { db, COLLECTIONS } from './src/config/firebase';
 import * as videoService from './src/services/videoService';
 import * as notificationService from './src/services/notificationService';
+import * as chatService from './src/services/chatService';
 
 import VideoItem from './src/components/VideoItem';
 import BottomNav from './src/components/BottomNav';
@@ -42,8 +43,12 @@ const AppContent = () => {
   // State điều hướng
   const [viewingProfile, setViewingProfile] = useState<User | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoType | null>(null);
+  const [chatTargetUser, setChatTargetUser] = useState<User | null>(null);
 
   const [isInChatDetail, setIsInChatDetail] = useState(false);
+
+  console.log("App Render: activeTab=", activeTab, "chatTargetUser=", chatTargetUser?.uid, "viewingProfile=", viewingProfile?.uid);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
 
@@ -74,7 +79,8 @@ const AppContent = () => {
       if (!doc.exists || !doc.data()) {
         const newUser: User = {
           uid: user.uid,
-          username: (user.displayName || 'user').replace(/\s/g, '').toLowerCase(),
+          // Generate a more robust username: base + short random string to avoid collisions
+          username: ((user.displayName || 'user').replace(/\s/g, '').toLowerCase() || 'user') + '_' + Math.random().toString(36).substring(2, 7),
           role: 'user',
           displayName: user.displayName || 'User',
           email: user.email || '',
@@ -105,17 +111,21 @@ const AppContent = () => {
 
   useEffect(() => {
     GoogleSignin.configure({ webClientId: '760597409672-aa19hd3irh8fonlsf287iulj4o2isf63.apps.googleusercontent.com' });
-    const subscriber = auth().onAuthStateChanged(async (user) => {
+  }, []);
+
+  // Listen to Auth State
+  useEffect(() => {
+    const onAuthStateChanged = async (user: any) => {
       if (user) {
-        if (!user.emailVerified && user.providerData.some(p => p.providerId === 'password')) {
+        if (!user.emailVerified && user.providerData.some((p: any) => p.providerId === 'password')) {
           setIsVerified(false); setIsAuthenticated(true); setIsLoading(false);
         } else {
           setIsVerified(true); setIsAuthenticated(true); await ensureUserDoc(user);
         }
       } else {
-        setIsAuthenticated(false); setIsVerified(false); setCurrentUser(null); setIsLoading(false);
       }
-    });
+    };
+    const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
     return subscriber;
   }, []);
 
@@ -196,6 +206,47 @@ const AppContent = () => {
     });
     return () => unsubscribe();
   }, [currentUser?.uid]);
+
+  // Subscribe to CHATS for unread count and new message Toast
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const previousUnreadMapRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setUnreadMsgCount(0);
+      return;
+    }
+    const unsub = chatService.subscribeChats(currentUser.uid, (chats) => {
+      let total = 0;
+      const currentMap: Record<string, number> = {};
+
+      chats.forEach(c => {
+        const count = c.unreadCounts?.[currentUser.uid] || 0;
+        total += count;
+        currentMap[c.id] = count;
+
+        // Check for NEW unread messages for Toast
+        const prev = previousUnreadMapRef.current[c.id] || 0;
+        if (count > prev) {
+          // This chat has a new message!
+          // Try to identify sender name
+          // otherUser might be wrong (as per previous bug), but we can try c.otherUser?.username
+          // Best effort toast
+          const senderName = c.otherUser?.username || "Someone";
+          // Show simple alert or toast (React Native doesn't have built-in Toast, using Alert for now only if active)
+          // Actually, Alert is intrusive. 
+          console.log(`New message from ${senderName}`);
+        }
+      });
+
+      previousUnreadMapRef.current = currentMap;
+      setUnreadMsgCount(total);
+    });
+    return () => unsub();
+  }, [currentUser?.uid]);
+
+  // Combined badge count
+  const totalBadge = unreadNotiCount + unreadMsgCount;
 
   // Fetch My Videos
   useEffect(() => {
@@ -373,6 +424,8 @@ const AppContent = () => {
                     currentUser={currentUser!}
                     onSelectUser={handleSelectSearchedUser}
                     onSelectVideo={handleSelectSearchedVideo}
+                    startChatWithUser={chatTargetUser}
+                    onChatOpened={() => setChatTargetUser(null)}
                   />
                 )}
 
@@ -405,6 +458,10 @@ const AppContent = () => {
                       // Store references to ProfileView's handlers before navigating
                       handleSelectSearchedVideo(video);
                     }}
+                    onMessage={(user) => {
+                      setChatTargetUser(user);
+                      setActiveTab(AppTab.INBOX);
+                    }}
                     onVideoUpdate={(videoId, action) => {
                       if (action === 'delete') {
                         setMyVideos(prev => prev.filter(v => v.id !== videoId));
@@ -425,8 +482,11 @@ const AppContent = () => {
               </View>
 
               {currentScreen === 'home' && !isInChatDetail && !isProfileSubView && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
-                <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} unreadCount={unreadNotiCount} />
-              )}
+                <BottomNav
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  unreadCount={totalBadge}
+                />)}
             </View>
           )}
 
@@ -448,6 +508,15 @@ const AppContent = () => {
                 }}
                 onCurrentUserUpdate={(updatedCurrentUser) => {
                   setCurrentUser(updatedCurrentUser);
+                }}
+                onMessage={(user) => {
+                  console.log("App: onMessage received from overlay", JSON.stringify(user));
+                  if (!user) console.error("App: User is null/undefined!");
+
+                  setChatTargetUser(user);
+                  setViewingProfile(null);
+                  popScreen(); // Close profile overlay if pushScreen was used
+                  setActiveTab(AppTab.INBOX);
                 }}
               />
             </View>

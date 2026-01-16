@@ -1,24 +1,34 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
-import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, Send, Bell } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar, Alert } from 'react-native';
+import { ArrowLeft, Plus, Mic, Smile, Image as ImageIcon, Flag, Send, Bell, MoreVertical } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chat, Message, User, Video as VideoType } from '../types/type';
 import * as chatService from '../services/chatService';
 import * as userService from '../services/userService';
 import * as notificationService from '../services/notificationService';
 import ActivityView from './ActivityView';
+import FollowListModal from './FollowListModal';
 
 interface ChatViewProps {
   onChatDetailChange?: (isInDetail: boolean) => void;
   currentUser: User;
   onSelectUser: (user: Partial<User>) => void;
   onSelectVideo: (video: VideoType) => void;
+  startChatWithUser?: User | null;
+  onChatOpened?: () => void;
 }
 
 type InboxTab = 'activity' | 'messages';
 
-const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, onSelectUser, onSelectVideo }) => {
+const ChatView: React.FC<ChatViewProps> = ({
+  onChatDetailChange,
+  currentUser,
+  onSelectUser,
+  onSelectVideo,
+  startChatWithUser,
+  onChatOpened
+}) => {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<InboxTab>('messages');
@@ -29,6 +39,45 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingChats, setLoadingChats] = useState(true);
   const [unreadNotiCount, setUnreadNotiCount] = useState(0);
+
+  // Handle startChatWithUser prop
+  useEffect(() => {
+    const initChat = async () => {
+      console.log("ChatView: initChat triggered", { startChatWithUser, currentUser: currentUser?.uid });
+      if (startChatWithUser && currentUser) {
+        // Check if we already have a chat with this user
+        setIsLoadingChat(true);
+        try {
+          const chat = await chatService.getOrCreateChat(currentUser, startChatWithUser);
+
+          // Correct the otherUser if it's missing or is the current user (stale data)
+          console.log("ChatView: getOrCreateChat result:", chat);
+          let finalChat = chat;
+          const otherId = chat.participants.find(p => p !== currentUser.uid);
+
+          if (otherId && (!chat.otherUser || chat.otherUser.uid === currentUser.uid)) {
+            const correctOther = await userService.getUserById(otherId);
+            if (correctOther) {
+              finalChat = { ...chat, otherUser: correctOther };
+            }
+          }
+
+          setSelectedChat(finalChat);
+          if (onChatOpened) onChatOpened();
+        } catch (error) {
+          console.error("Error starting chat:", error);
+        } finally {
+          setIsLoadingChat(false);
+        }
+      }
+    };
+    initChat();
+  }, [startChatWithUser, currentUser]);
+
+
+
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
 
   // Notify parent when entering/leaving chat detail
   // Hide bottom nav only when: in chat conversation OR in activity page
@@ -47,37 +96,90 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
     return () => unsub && unsub();
   }, [currentUser?.uid]);
 
-  // Attach otherUser info if missing
+  // Attach correct otherUser info
   useEffect(() => {
-    if (!chats || chats.length === 0) return;
-    const missing = chats.filter((c) => !c.otherUser || !c.otherUser.username);
-    if (!missing.length) return;
+    if (!chats || chats.length === 0 || !currentUser.uid) return;
 
     const fill = async () => {
       const updated = await Promise.all(chats.map(async (c) => {
-        if (c.otherUser && c.otherUser.username) return c;
-        const otherId = c.participants.find((p) => p !== currentUser.uid);
+        // Try to find otherId from participants
+        let otherId = c.participants.find((p) => p !== currentUser.uid);
+
+        // Fallback: If participants array is weird, try to parse from chat.id (uid1_uid2)
+        if (!otherId && c.id.includes('_')) {
+          const parts = c.id.split('_');
+          otherId = parts.find(p => p !== currentUser.uid);
+        }
+
+        // If still no otherId (e.g. self-chat or weird ID), keep original
         if (!otherId) return c;
+
+        // If c.otherUser matches the calculate otherId, it's already correct. Keep it.
+        if (c.otherUser && c.otherUser.uid === otherId) {
+          return c;
+        }
+
+        // Otherwise, fetch the correct user info
         const other = await userService.getUserById(otherId);
         if (!other) return c;
+
         return { ...c, otherUser: other } as Chat;
       }));
-      setChats(updated);
+
+      // Only update if there are actual changes to avoid infinite loop
+      // Simple check: compare stringified JSON or just length? 
+      // JSON stringify is expensive but safe for deep compare here.
+      // Better: check if any reference changed?
+      // Since we return new objects in map, references change. 
+      // We should check if content actually differs from current 'chats'.
+      // For now, let's just setChats if we detected a mismatch above.
+
+      // Optimization: Only setChats if we actually replaced something.
+      // But the map above ALWAYS returns a list.
+      // Let's filter to see if we need to update.
+      const needsUpdate = updated.some((u, i) => u.otherUser?.uid !== chats[i].otherUser?.uid);
+      if (needsUpdate) {
+        setChats(updated);
+      }
     };
 
     fill();
   }, [chats, currentUser.uid]);
 
+
+
+  // Sync selectedChat with latest data from chats list (to get corrected otherUser)
+  useEffect(() => {
+    if (selectedChat) {
+      const updatedChat = chats.find(c => c.id === selectedChat.id);
+      if (updatedChat && updatedChat !== selectedChat) {
+        // Only update if reference changed (meaning data potentially updated)
+        setSelectedChat(updatedChat);
+      }
+    }
+  }, [chats]);
+
   // Subscribe messages when a chat is selected
   useEffect(() => {
     if (!selectedChat) return;
+
+    // Mark as read immediately
+    if (currentUser?.uid) {
+      chatService.markChatRead(selectedChat.id, currentUser.uid);
+    }
+
     setLoadingMessages(true);
     const unsub = chatService.subscribeMessages(selectedChat.id, (list) => {
       setMessages(list);
       setLoadingMessages(false);
+      // Also mark read when new messages arrive while open? 
+      // Yes, if we are viewing it.
+      if (currentUser?.uid) {
+        chatService.markChatRead(selectedChat.id, currentUser.uid);
+      }
     });
     return () => unsub && unsub();
-  }, [selectedChat]);
+  }, [selectedChat?.id]);
 
   // Subscribe to notifications for badge
   useEffect(() => {
@@ -90,10 +192,10 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
   }, [currentUser?.uid]);
 
   const handleSend = async () => {
-    if (!selectedChat) return;
-    const text = input.trim();
-    if (!text) return;
+    if (!input.trim() || !selectedChat) return;
+    const text = input;
     setInput('');
+    // Pass otherUser (casted to User) to ensure unread count is incremented
     await chatService.sendMessage(selectedChat.id, currentUser, text, selectedChat.otherUser as User);
   };
 
@@ -104,6 +206,8 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
   const goBackToMessages = () => {
     setSelectedChat(null);
   };
+
+  console.log("ChatView Render: selectedChat ID =", selectedChat?.id, "otherUser =", selectedChat?.otherUser?.username);
 
   if (!currentUser?.uid) {
     return (
@@ -137,14 +241,54 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
             <ArrowLeft color="#000" size={24} />
           </TouchableOpacity>
           <View style={styles.chatHeaderInfo}>
-            <Image source={{ uri: selectedChat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.chatHeaderAvatar} />
-            <View>
+            <TouchableOpacity onPress={() => selectedChat.otherUser && onSelectUser(selectedChat.otherUser)}>
+              <Image source={{ uri: selectedChat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.chatHeaderAvatar} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => selectedChat.otherUser && onSelectUser(selectedChat.otherUser)}>
               <Text style={styles.chatHeaderName}>{selectedChat.otherUser?.username || 'User'}</Text>
-              <Text style={styles.chatHeaderStatus}>Active 11m ago</Text>
-            </View>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.headerBtn}>
-            <Flag color="#000" size={20} />
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => {
+              Alert.alert(
+                "Chat Settings",
+                "Manage this conversation",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete Conversation",
+                    style: "destructive",
+                    onPress: async () => {
+                      if (!selectedChat) return;
+                      Alert.alert(
+                        "Confirm Delete",
+                        "This will hide the conversation from your list.",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Delete",
+                            style: "destructive",
+                            onPress: async () => {
+                              try {
+                                await chatService.deleteChatForUser(selectedChat.id, currentUser.uid);
+                                setSelectedChat(null);
+                              } catch (e) {
+                                Alert.alert("Error", "Could not delete chat");
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }
+                  },
+                  { text: "Report", onPress: () => Alert.alert("Report", "Report feature coming soon.") },
+                  { text: "Block User", onPress: () => Alert.alert("Block", "Block feature coming soon.") }
+                ]
+              );
+            }}
+          >
+            <MoreVertical color="#000" size={24} />
           </TouchableOpacity>
         </View>
 
@@ -153,19 +297,68 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
           {loadingMessages ? (
             <ActivityIndicator size="small" color="#00d4ff" style={{ marginTop: 20 }} />
           ) : (
-            messages.map((m, index) => {
-              const isMe = m.senderId === currentUser.uid;
-              return (
-                <View key={m.id || index}>
-                  <View style={[styles.msgWrapper, isMe ? styles.msgMe : styles.msgOther]}>
-                    {!isMe && <Image source={{ uri: selectedChat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.msgAvatar} />}
-                    <View style={isMe ? styles.msgBubbleMe : styles.msgBubbleOther}>
-                      <Text style={isMe ? styles.msgTextMe : styles.msgTextOther}>{m.text}</Text>
+            (() => {
+              // 1. Filter visible messages first
+              const visibleMessages = messages.filter(m => {
+                // Filter out messages deleted for me
+                if (m.deletedFor?.includes(currentUser.uid)) return false;
+                // Filter out messages cleared by "Delete Conversation"
+                const clearedTime = selectedChat.clearedTimestamps?.[currentUser.uid] || 0;
+                if (m.timestamp <= clearedTime) return false;
+                return true;
+              });
+
+              return visibleMessages.map((m, index) => {
+                const isMe = m.senderId === currentUser.uid;
+
+                // 2. Check for Date Separator
+                let showDate = false;
+                const currentDate = new Date(m.timestamp);
+
+                if (index === 0) {
+                  showDate = true;
+                } else {
+                  const prevDate = new Date(visibleMessages[index - 1].timestamp);
+                  if (currentDate.getDate() !== prevDate.getDate() ||
+                    currentDate.getMonth() !== prevDate.getMonth() ||
+                    currentDate.getFullYear() !== prevDate.getFullYear()) {
+                    showDate = true;
+                  }
+                }
+
+                // Format Separator Date
+                const dateText = currentDate.getDate() === new Date().getDate() &&
+                  currentDate.getMonth() === new Date().getMonth() &&
+                  currentDate.getFullYear() === new Date().getFullYear()
+                  ? 'Today' : currentDate.toLocaleDateString(); // e.g. "To day" or "10/05/2025"
+
+                return (
+                  <View key={m.id || index}>
+                    {showDate && (
+                      <View style={styles.dateSeparator}>
+                        <Text style={styles.dateSeparatorText}>{dateText}</Text>
+                      </View>
+                    )}
+                    <View style={[styles.msgWrapper, isMe ? styles.msgMe : styles.msgOther]}>
+                      {!isMe && (
+                        <TouchableOpacity onPress={() => selectedChat.otherUser && onSelectUser(selectedChat.otherUser)}>
+                          <Image source={{ uri: selectedChat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.msgAvatar} />
+                        </TouchableOpacity>
+                      )}
+                      <View style={isMe ? styles.msgBubbleMe : styles.msgBubbleOther}>
+                        <Text style={isMe ? styles.msgTextMe : styles.msgTextOther}>{m.text}</Text>
+                        <Text style={[styles.msgTime, isMe ? { color: 'rgba(255,255,255,0.7)' } : { color: 'rgba(0,0,0,0.5)' }]}>
+                          {(() => {
+                            const d = new Date(m.timestamp);
+                            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          })()}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-              );
-            })
+                );
+              });
+            })()
           )}
         </ScrollView>
 
@@ -179,7 +372,7 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
                 style={styles.textInput}
                 value={input}
                 onChangeText={setInput}
-                onSubmitEditing={handleSend}
+                onSubmitEditing={() => selectedChat.otherUser && handleSend()}
                 returnKeyType="send"
               />
               <View style={styles.inputIcons}>
@@ -217,7 +410,7 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
           </View>
         </TouchableOpacity>
         <Text style={styles.messagesTitle}>Direct messages</Text>
-        <TouchableOpacity style={styles.headerBtn}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => setShowNewChatModal(true)}>
           <Plus color="#000" size={24} />
         </TouchableOpacity>
       </View>
@@ -235,6 +428,12 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
           </View>
           <Text style={styles.emptyTitle}>Message your friends</Text>
           <Text style={styles.emptySubtitle}>Share videos or start a conversation</Text>
+          <TouchableOpacity
+            style={{ marginTop: 20, backgroundColor: '#fe2c55', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 4 }}
+            onPress={() => setShowNewChatModal(true)}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Start Chat</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         // Chat List
@@ -244,16 +443,67 @@ const ChatView: React.FC<ChatViewProps> = ({ onChatDetailChange, currentUser, on
               key={chat.id}
               style={styles.chatRow}
               onPress={() => selectChat(chat)}
+              onLongPress={() => {
+                Alert.alert(
+                  "Delete Conversation",
+                  "Are you sure you want to delete this conversation?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: async () => {
+                        try {
+                          await chatService.deleteChatForUser(chat.id, currentUser.uid);
+                          // Optimistic update handled by snapshot subscription filter
+                        } catch (e) {
+                          Alert.alert("Error", "Could not delete chat");
+                        }
+                      }
+                    }
+                  ]
+                );
+              }}
             >
               <Image source={{ uri: chat.otherUser?.avatarUrl || 'https://picsum.photos/200' }} style={styles.rowAvatar} />
               <View style={styles.rowInfo}>
-                <Text style={styles.rowUser}>{chat.otherUser?.username || 'User'}</Text>
-                <Text style={styles.rowMsg} numberOfLines={1}>{chat.lastMessage || 'Tap to start chatting'}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={styles.rowUser}>{chat.otherUser?.username || 'User'}</Text>
+                  {chat.unreadCounts?.[currentUser.uid] ? (
+                    <View style={{ backgroundColor: 'red', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{chat.unreadCounts[currentUser.uid]}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[styles.rowMsg, (chat.unreadCounts?.[currentUser.uid] || 0) > 0 && { fontWeight: 'bold', color: '#000' }]} numberOfLines={1}>
+                  {chat.lastMessage || 'Tap to start chatting'}
+                </Text>
               </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
       )}
+
+      {/* New Chat Modal */}
+      <FollowListModal
+        visible={showNewChatModal}
+        title="Friends"
+        enableTabs={true}
+        userId={currentUser.uid}
+        onClose={() => setShowNewChatModal(false)}
+        onUserPress={async (user) => {
+          setShowNewChatModal(false);
+          setIsLoadingChat(true);
+          try {
+            const chat = await chatService.getOrCreateChat(currentUser, user);
+            setSelectedChat(chat);
+          } catch (error) {
+            console.error("Error creating chat:", error);
+          } finally {
+            setIsLoadingChat(false);
+          }
+        }}
+      />
     </View>
   );
 };
@@ -421,29 +671,35 @@ const styles = StyleSheet.create({
   msgBubbleMe: {
     backgroundColor: '#00d4ff',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
     borderBottomRightRadius: 4,
-    maxWidth: '75%',
+    maxWidth: '80%',
   },
   msgBubbleOther: {
     backgroundColor: '#f1f1f2',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
     borderBottomLeftRadius: 4,
-    maxWidth: '75%',
+    maxWidth: '80%',
   },
   msgTextMe: {
     color: '#fff',
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 22,
   },
   msgTextOther: {
     color: '#000',
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 22,
   },
+  msgTime: {
+    fontSize: 10,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+
 
   // Input Bar
   inputBar: {
@@ -475,6 +731,23 @@ const styles = StyleSheet.create({
   inputIconBtn: {
     padding: 4,
     marginLeft: 8,
+  },
+
+  // Date Separator
+  dateSeparator: {
+    alignItems: 'center',
+    marginVertical: 16,
+    marginBottom: 12,
+  },
+  dateSeparatorText: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '500',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
 });
 
