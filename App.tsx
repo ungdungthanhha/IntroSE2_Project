@@ -322,6 +322,7 @@ const AppContent = () => {
                               currentUserId={currentUser?.uid} // Pass currentUserId
                               onLikeChange={() => fetchVideos(false)} // Refresh videos when user likes
                               onSaveChange={() => fetchVideos(false)} // Refresh videos when user saves
+                              onCommentAdded={() => fetchVideos(false)} // Refresh videos when user comments
                             />
                           )}
                           snapToInterval={ACTUAL_VIDEO_HEIGHT}
@@ -377,7 +378,10 @@ const AppContent = () => {
                           : v
                       ));
                     }}
-                    onSelectVideo={handleSelectSearchedVideo}
+                    onSelectVideo={(video) => {
+                      // Store references to ProfileView's handlers before navigating
+                      handleSelectSearchedVideo(video);
+                    }}
                     onVideoUpdate={(videoId, action) => {
                       if (action === 'delete') {
                         setMyVideos(prev => prev.filter(v => v.id !== videoId));
@@ -439,8 +443,25 @@ const AppContent = () => {
                   pushScreen('profile');
                 }}
                 currentUserId={currentUser?.uid}
-                onLikeChange={() => fetchVideos(false)} // Refresh videos when user likes
-                onSaveChange={() => fetchVideos(false)} // Refresh videos when user saves
+                onLikeChange={(videoId, isLiked) => {
+                  // Call ProfileView's handler if attached to video object
+                  const handler = (selectedVideo as any).__profileViewLikeHandler;
+                  if (handler) {
+                    handler(videoId, isLiked);
+                  }
+                  // Also refresh main feed
+                  fetchVideos(false);
+                }}
+                onSaveChange={(videoId, isSaved) => {
+                  // Call ProfileView's handler if attached to video object
+                  const handler = (selectedVideo as any).__profileViewSaveHandler;
+                  if (handler) {
+                    handler(videoId, isSaved);
+                  }
+                  // Also refresh main feed
+                  fetchVideos(false);
+                }}
+                onCommentAdded={() => fetchVideos(false)} // Refresh videos when user comments
               />
               <TouchableOpacity
                 style={{ position: 'absolute', top: insets.top + 10, left: 16, zIndex: 9991, padding: 8 }}

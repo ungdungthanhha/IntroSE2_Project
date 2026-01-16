@@ -27,6 +27,8 @@ interface ProfileViewProps {
   onCurrentUserUpdate?: (user: User) => void;
   onSelectVideo?: (video: Video) => void;
   onVideoUpdate?: (videoId: string, action: 'delete' | 'unlike' | 'unsave') => void;
+  onLikeChange?: (videoId: string, isLiked: boolean) => void;
+  onSaveChange?: (videoId: string, isSaved: boolean) => void;
 }
 
 const ProfileView: React.FC<ProfileViewProps> = ({
@@ -40,7 +42,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   onUserUpdate,
   onCurrentUserUpdate,
   onSelectVideo,
-  onVideoUpdate
+  onVideoUpdate,
+  onLikeChange,
+  onSaveChange
 }) => {
   // Use props directly instead of destructing to access onVideoUpdate in callback
   const props = { onUserUpdate, onSelectVideo, onVideoUpdate };
@@ -113,26 +117,43 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     console.log('ProfileView - Total likes calculated:', total);
   }, [userVideos]);
 
-  // Fetch videos when tab changes
+  // Fetch videos when tab changes - Always refetch to ensure fresh data and auto-remove unliked/unsaved videos
   useEffect(() => {
     const fetchTabVideos = async () => {
       if (!initialUser.uid) return;
 
-      if (activeTab === 'liked' && likedVideos.length === 0) {
+      if (activeTab === 'liked') {
         setLoadingVideos(true);
-        const vids = await videoService.getLikedVideos(initialUser.uid);
-        setLikedVideos(vids);
-        setLoadingVideos(false);
-      } else if (activeTab === 'locked' && savedVideos.length === 0) { // 'locked' tab for Saved
+        try {
+          const vids = await videoService.getLikedVideos(initialUser.uid);
+          setLikedVideos(vids);
+        } catch (error) {
+          console.error('Error fetching liked videos:', error);
+        } finally {
+          setLoadingVideos(false);
+        }
+      } else if (activeTab === 'locked') { // 'locked' tab for Saved
         setLoadingVideos(true);
-        const vids = await videoService.getSavedVideos(initialUser.uid);
-        setSavedVideos(vids);
-        setLoadingVideos(false);
+        try {
+          const vids = await videoService.getSavedVideos(initialUser.uid);
+          setSavedVideos(vids);
+        } catch (error) {
+          console.error('Error fetching saved videos:', error);
+        } finally {
+          setLoadingVideos(false);
+        }
       }
     };
 
     fetchTabVideos();
   }, [activeTab, initialUser.uid]);
+
+  // Handle video status changes (unlike/unsave) - immediately remove from gallery
+  // This is called when videos are unliked/unsaved from VideoItem detail view
+  useEffect(() => {
+    // This effect helps sync the profile view when a video's like/save status changes
+    // The primary sync happens when switching tabs (which triggers a refetch)
+  }, [likedVideos, savedVideos]);
 
   useEffect(() => {
     const backAction = () => {
@@ -276,6 +297,40 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
   const handleMessage = () => {
     if (onMessage) onMessage(currentUserData);
+  };
+
+  // Handle realtime removal of videos when unliked/unsaved
+  const handleVideoLikeChange = (videoId: string, isLiked: boolean) => {
+    if (!isLiked) {
+      // Video was unliked - remove from liked gallery immediately
+      setLikedVideos(prev => prev.filter(v => v.id !== videoId));
+    }
+    // Forward to parent if provided
+    if (onLikeChange) {
+      onLikeChange(videoId, isLiked);
+    }
+  };
+
+  const handleVideoSaveChange = (videoId: string, isSaved: boolean) => {
+    if (!isSaved) {
+      // Video was unsaved - remove from saved gallery immediately
+      setSavedVideos(prev => prev.filter(v => v.id !== videoId));
+    }
+    // Forward to parent if provided
+    if (onSaveChange) {
+      onSaveChange(videoId, isSaved);
+    }
+  };
+
+  // Wrap onSelectVideo to pass handlers
+  const handleSelectVideo = (video: Video) => {
+    // Attach handlers to the video object so VideoItem can use them
+    (video as any).__profileViewLikeHandler = handleVideoLikeChange;
+    (video as any).__profileViewSaveHandler = handleVideoSaveChange;
+    
+    if (onSelectVideo) {
+      onSelectVideo(video);
+    }
   };
 
   return (
@@ -442,11 +497,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({
           <TouchableOpacity
             key={video.id}
             style={styles.gridItem}
-            onPress={() => onSelectVideo && onSelectVideo(video)}
+            onPress={() => handleSelectVideo(video)}
             onLongPress={() => {
+              // ONLY allow long-press for user's own videos tab (Case 1)
+              // Disable long-press for liked and saved tabs
               if (!currentUserId) return;
 
-              // CASE 1: DELETE MY VIDEO
+              // CASE 1: DELETE MY VIDEO (Only allow this)
               if (activeTab === 'videos' && isOwnProfile && currentUserId === video.ownerUid) {
                 Alert.alert(
                   "Delete Video",
@@ -467,50 +524,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
                   ]
                 );
               }
-
-              // CASE 2: REMOVE FROM LIKED
-              else if (activeTab === 'liked' && isOwnProfile) {
-                Alert.alert(
-                  "Remove from Liked",
-                  "Unlike this video?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Remove", style: "destructive", onPress: async () => {
-                        // isLiked = true -> Pass true to toggle to false
-                        const res = await videoService.toggleLikeVideo(video.id, currentUserId, true);
-                        if (res.success) {
-                          setLikedVideos(prev => prev.filter(v => v.id !== video.id));
-                        } else {
-                          Alert.alert("Error", res.error || "Failed");
-                        }
-                      }
-                    }
-                  ]
-                );
-              }
-
-              // CASE 3: REMOVE FROM SAVED (LOCKED TAB)
-              else if (activeTab === 'locked' && isOwnProfile) {
-                Alert.alert(
-                  "Remove from Saved",
-                  "Unsave this video?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Remove", style: "destructive", onPress: async () => {
-                        // isSaved = true -> Pass true to toggle to false
-                        const res = await videoService.toggleSaveVideo(video.id, currentUserId, true);
-                        if (res.success) {
-                          setSavedVideos(prev => prev.filter(v => v.id !== video.id));
-                        } else {
-                          Alert.alert("Error", res.error || "Failed");
-                        }
-                      }
-                    }
-                  ]
-                );
-              }
+              // Long-press disabled for liked and saved tabs
             }}
           >
             <Image
