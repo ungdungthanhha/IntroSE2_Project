@@ -10,6 +10,7 @@ import auth from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { db, COLLECTIONS } from './src/config/firebase';
 import * as videoService from './src/services/videoService';
+import * as notificationService from './src/services/notificationService';
 
 import VideoItem from './src/components/VideoItem';
 import BottomNav from './src/components/BottomNav';
@@ -60,6 +61,8 @@ const AppContent = () => {
   // Screen Time State
   const [isTimeLimitReached, setIsTimeLimitReached] = useState(false);
   const [isTimeLimitIgnored, setIsTimeLimitIgnored] = useState(false);
+
+  const [unreadNotiCount, setUnreadNotiCount] = useState(0);
 
   // --- LOGIC DATABASE & AUTH (GIỮ NGUYÊN) ---
   const ensureUserDoc = async (user: any): Promise<boolean> => {
@@ -179,6 +182,19 @@ const AppContent = () => {
   // Fetch videos on mount and when currentUser changes
   useEffect(() => {
     fetchVideos();
+  }, [currentUser?.uid]);
+
+  // Subscribe to notifications for badge
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setUnreadNotiCount(0);
+      return;
+    }
+    const unsubscribe = notificationService.getNotifications(currentUser.uid, (list) => {
+      const unread = list.filter(n => !n.isRead).length;
+      setUnreadNotiCount(unread);
+    });
+    return () => unsubscribe();
   }, [currentUser?.uid]);
 
   // Fetch My Videos
@@ -409,7 +425,7 @@ const AppContent = () => {
               </View>
 
               {currentScreen === 'home' && !isInChatDetail && !isProfileSubView && activeTab !== AppTab.LIVE && activeTab !== AppTab.UPLOAD && (
-                <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+                <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} unreadCount={unreadNotiCount} />
               )}
             </View>
           )}

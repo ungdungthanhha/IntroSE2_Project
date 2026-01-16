@@ -7,9 +7,10 @@ import { AppTab } from '../types/type';
 interface BottomNavProps {
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
+  unreadCount?: number;
 }
 
-const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
+const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab, unreadCount = 0 }) => {
   const isHome = activeTab === AppTab.HOME;
 
   const getIconColor = (tab: AppTab) => {
@@ -43,7 +44,10 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => setActiveTab(AppTab.INBOX)} style={styles.tab}>
-        <MessageSquare size={28} color={getIconColor(AppTab.INBOX)} />
+        <View>
+          <MessageSquare size={28} color={getIconColor(AppTab.INBOX)} />
+          {unreadCount > 0 && <View style={styles.redDot} />}
+        </View>
         <Text style={[styles.label, { color: getIconColor(AppTab.INBOX) }]}>Inbox</Text>
       </TouchableOpacity>
 
@@ -75,6 +79,17 @@ const styles = StyleSheet.create({
   },
   tab: { alignItems: 'center' },
   label: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  redDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#fe2c55',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
   uploadTab: { justifyContent: 'center', marginTop: -4 },
   uploadBtn: { width: 50, height: 32, position: 'relative', alignItems: 'center', justifyContent: 'center' },
   uploadBgContainer: {
