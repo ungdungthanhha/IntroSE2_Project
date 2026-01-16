@@ -45,15 +45,19 @@ const ChatView: React.FC<ChatViewProps> = ({
     const initChat = async () => {
       console.log("ChatView: initChat triggered", { startChatWithUser, currentUser: currentUser?.uid });
       if (startChatWithUser && currentUser) {
+        // Switch to messages tab first
+        setActiveTab('messages');
+
         // Check if we already have a chat with this user
         setIsLoadingChat(true);
         try {
           const chat = await chatService.getOrCreateChat(currentUser, startChatWithUser);
 
-          // Correct the otherUser if it's missing or is the current user (stale data)
+          // Correct the otherUser using chat.id parsing
           console.log("ChatView: getOrCreateChat result:", chat);
           let finalChat = chat;
-          const otherId = chat.participants.find(p => p !== currentUser.uid);
+          const parts = chat.id.split('_');
+          const otherId = parts.find(p => p !== currentUser.uid);
 
           if (otherId && (!chat.otherUser || chat.otherUser.uid === currentUser.uid)) {
             const correctOther = await userService.getUserById(otherId);
@@ -96,25 +100,20 @@ const ChatView: React.FC<ChatViewProps> = ({
     return () => unsub && unsub();
   }, [currentUser?.uid]);
 
-  // Attach correct otherUser info
+  // Attach correct otherUser info using chat.id parsing
   useEffect(() => {
     if (!chats || chats.length === 0 || !currentUser.uid) return;
 
     const fill = async () => {
       const updated = await Promise.all(chats.map(async (c) => {
-        // Try to find otherId from participants
-        let otherId = c.participants.find((p) => p !== currentUser.uid);
+        // Always parse otherId from chat.id (format: uid1_uid2, sorted)
+        const parts = c.id.split('_');
+        const otherId = parts.find(p => p !== currentUser.uid);
 
-        // Fallback: If participants array is weird, try to parse from chat.id (uid1_uid2)
-        if (!otherId && c.id.includes('_')) {
-          const parts = c.id.split('_');
-          otherId = parts.find(p => p !== currentUser.uid);
-        }
-
-        // If still no otherId (e.g. self-chat or weird ID), keep original
+        // If no otherId found, keep original
         if (!otherId) return c;
 
-        // If c.otherUser matches the calculate otherId, it's already correct. Keep it.
+        // If c.otherUser already matches otherId, keep it
         if (c.otherUser && c.otherUser.uid === otherId) {
           return c;
         }
@@ -126,17 +125,7 @@ const ChatView: React.FC<ChatViewProps> = ({
         return { ...c, otherUser: other } as Chat;
       }));
 
-      // Only update if there are actual changes to avoid infinite loop
-      // Simple check: compare stringified JSON or just length? 
-      // JSON stringify is expensive but safe for deep compare here.
-      // Better: check if any reference changed?
-      // Since we return new objects in map, references change. 
-      // We should check if content actually differs from current 'chats'.
-      // For now, let's just setChats if we detected a mismatch above.
-
-      // Optimization: Only setChats if we actually replaced something.
-      // But the map above ALWAYS returns a list.
-      // Let's filter to see if we need to update.
+      // Only update if there are actual changes
       const needsUpdate = updated.some((u, i) => u.otherUser?.uid !== chats[i].otherUser?.uid);
       if (needsUpdate) {
         setChats(updated);
@@ -298,6 +287,11 @@ const ChatView: React.FC<ChatViewProps> = ({
             <ActivityIndicator size="small" color="#00d4ff" style={{ marginTop: 20 }} />
           ) : (
             (() => {
+              // Derive user IDs from chat.id (format: uid1_uid2, sorted)
+              const chatIdParts = selectedChat.id.split('_');
+              // Find which part of the chat ID matches the current user
+              const myUidFromChat = chatIdParts.find(uid => uid === currentUser.uid);
+
               // 1. Filter visible messages first
               const visibleMessages = messages.filter(m => {
                 // Filter out messages deleted for me
@@ -309,7 +303,8 @@ const ChatView: React.FC<ChatViewProps> = ({
               });
 
               return visibleMessages.map((m, index) => {
-                const isMe = m.senderId === currentUser.uid;
+                // Use senderId matched against myUidFromChat (derived from chat ID)
+                const isMe = myUidFromChat ? m.senderId === myUidFromChat : m.senderId === currentUser.uid;
 
                 // 2. Check for Date Separator
                 let showDate = false;
@@ -330,7 +325,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                 const dateText = currentDate.getDate() === new Date().getDate() &&
                   currentDate.getMonth() === new Date().getMonth() &&
                   currentDate.getFullYear() === new Date().getFullYear()
-                  ? 'Today' : currentDate.toLocaleDateString(); // e.g. "To day" or "10/05/2025"
+                  ? 'Today' : currentDate.toLocaleDateString();
 
                 return (
                   <View key={m.id || index}>
@@ -350,7 +345,11 @@ const ChatView: React.FC<ChatViewProps> = ({
                         <Text style={[styles.msgTime, isMe ? { color: 'rgba(255,255,255,0.7)' } : { color: 'rgba(0,0,0,0.5)' }]}>
                           {(() => {
                             const d = new Date(m.timestamp);
-                            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const now = new Date();
+                            const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                            return isToday
+                              ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : `${d.getDate()}/${d.getMonth() + 1} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
                           })()}
                         </Text>
                       </View>
@@ -655,6 +654,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'flex-end',
+    width: '100%',
   },
   msgMe: {
     justifyContent: 'flex-end',
