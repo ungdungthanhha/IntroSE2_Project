@@ -200,7 +200,7 @@ const AppContent = () => {
   // Fetch My Videos
   useEffect(() => {
     if (currentUser?.uid) {
-      videoService.getVideosByUser(currentUser.uid).then(setMyVideos);
+      videoService.getVideosByUser(currentUser.uid, currentUser.uid).then(setMyVideos);
     }
   }, [currentUser?.uid, activeTab === AppTab.PROFILE]);
 
@@ -208,9 +208,9 @@ const AppContent = () => {
   useEffect(() => {
     if (viewingProfile?.uid) {
       setOtherVideos([]); // Clear old data
-      videoService.getVideosByUser(viewingProfile.uid).then(setOtherVideos);
+      videoService.getVideosByUser(viewingProfile.uid, currentUser?.uid).then(setOtherVideos);
     }
-  }, [viewingProfile?.uid]);
+  }, [viewingProfile?.uid, currentUser?.uid]);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) setActiveVideoIndex(viewableItems[0].index || 0);

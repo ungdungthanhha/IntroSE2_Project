@@ -187,7 +187,7 @@ export const getVideoById = async (videoId: string, userId?: string): Promise<Vi
 /**
  * 4. Lấy danh sách video của một USER cụ thể (Cho màn hình Profile)
  */
-export const getVideosByUser = async (userId: string): Promise<Video[]> => {
+export const getVideosByUser = async (userId: string, currentUserId?: string): Promise<Video[]> => {
   try {
     const snapshot = await db
       .collection(COLLECTIONS.VIDEOS)
@@ -195,7 +195,7 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => {
+    const videos = snapshot.docs.map(doc => {
       const data = doc.data();
       const createdAt = typeof data.createdAt === 'string'
         ? new Date(data.createdAt).getTime()
@@ -211,6 +211,25 @@ export const getVideosByUser = async (userId: string): Promise<Video[]> => {
       if (timeDiff !== 0) return timeDiff;
       return (a.ownerUid || '').localeCompare(b.ownerUid || '');
     });
+
+    if (currentUserId) {
+      // Fetch liked and saved video IDs for the current user to mark videos
+      const [likedSnapshot, savedSnapshot] = await Promise.all([
+        db.collection(COLLECTIONS.USERS).doc(currentUserId).collection('likedVideos').get(),
+        db.collection(COLLECTIONS.USERS).doc(currentUserId).collection('savedVideos').get()
+      ]);
+
+      const likedIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+      const savedIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
+      return videos.map(v => ({
+        ...v,
+        isLiked: likedIds.has(v.id),
+        isSaved: savedIds.has(v.id)
+      }));
+    }
+
+    return videos;
   } catch (error) {
     console.error('Error getting user videos:', error);
     return [];
