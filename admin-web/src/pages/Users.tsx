@@ -1,13 +1,16 @@
 // src/pages/Users.tsx
 import React, { useEffect, useState } from 'react';
-import { FaTrash, FaEye, FaCheckCircle, FaSync } from 'react-icons/fa'; 
-import type { User } from '../types/types'; 
-import { getUsers, deleteUser } from '../services/dataService'; 
+import { FaTrash, FaEye, FaCheckCircle, FaSync } from 'react-icons/fa';
+import type { User } from '../types/types';
+import { getUsers, deleteUser } from '../services/dataService';
 import { useSearch } from '../context/SearchContext';
+import UserTrackingModal from '../components/UserTrackingModal';
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
 
   const { searchTerm } = useSearch();
 
@@ -26,7 +29,7 @@ const Users: React.FC = () => {
     const confirm = window.confirm(
       `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn XÓA VĨNH VIỄN tài khoản @${user.username}?\n\nDữ liệu sẽ bị xóa khỏi hệ thống và không thể khôi phục!`
     );
-    
+
     if (confirm) {
       try {
         await deleteUser(user.uid);
@@ -57,11 +60,11 @@ const Users: React.FC = () => {
 
   return (
     <div style={{ padding: '24px', background: '#f8f9fa', minHeight: '100vh' }}>
-      
+
       {/* Header */}
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '800', margin: 0, color: '#333' }}>Quản lý Người dùng</h2>
-        <button 
+        <button
           onClick={fetchData}
           style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', border: 'none', background: '#333', color: 'white', borderRadius: '6px', cursor: 'pointer' }}
         >
@@ -90,87 +93,105 @@ const Users: React.FC = () => {
           </thead>
           <tbody>
             {filteredUsers.length === 0 ? (
-               // Thông báo khác nhau tùy vào việc có đang tìm kiếm hay không
-                <tr>
-                    <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
-                        {searchTerm ? "Không tìm thấy người dùng nào phù hợp." : "Chưa có người dùng nào trong hệ thống."}
-                    </td>
-                </tr>
+              // Thông báo khác nhau tùy vào việc có đang tìm kiếm hay không
+              <tr>
+                <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#888' }}>
+                  {searchTerm ? "Không tìm thấy người dùng nào phù hợp." : "Chưa có người dùng nào trong hệ thống."}
+                </td>
+              </tr>
             ) : (
-                filteredUsers.map(u => (
+              filteredUsers.map(u => (
                 <tr key={u.uid} style={{ borderBottom: '1px solid #eee' }}>
-                    {/* Cột 1: Info User */}
-                    <td style={{ padding: '16px' }}>
+                  {/* Cột 1: Info User */}
+                  <td style={{ padding: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <img 
-                            src={u.avatarUrl || `https://ui-avatars.com/api/?name=${u.username}&background=random`} 
-                            alt="avt" 
-                            style={{ width: '48px', height: '48px', borderRadius: '50%', border: '1px solid #eee' }} 
-                        />
-                        <div>
+                      <img
+                        src={u.avatarUrl || `https://ui-avatars.com/api/?name=${u.username}&background=random`}
+                        alt="avt"
+                        style={{ width: '48px', height: '48px', borderRadius: '50%', border: '1px solid #eee' }}
+                      />
+                      <div>
                         <div style={{ fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            @{u.username}
-                            {u.followersCount > 1000000 && <FaCheckCircle color="#20D5EC" size={12} title="Tích xanh" />}
+                          @{u.username}
+                          {u.followersCount > 1000000 && <FaCheckCircle color="#20D5EC" size={12} title="Tích xanh" />}
                         </div>
                         <div style={{ fontSize: '13px', color: '#888' }}>{u.email}</div>
                         <div style={{ fontSize: '11px', color: '#aaa' }}>UID: {u.uid.substring(0, 6)}...</div>
-                        </div>
+                      </div>
                     </div>
-                    </td>
+                  </td>
 
-                    {/* Cột 2: Bio */}
-                    <td style={{ padding: '16px', color: '#555', maxWidth: '250px', fontSize: '14px' }}>
+                  {/* Cột 2: Bio */}
+                  <td style={{ padding: '16px', color: '#555', maxWidth: '250px', fontSize: '14px' }}>
                     {u.bio || "Chưa có tiểu sử"}
-                    </td>
+                  </td>
 
-                    {/* Cột 3: Stats */}
-                    <td style={{ padding: '16px', fontSize: '14px' }}>
+                  {/* Cột 3: Stats */}
+                  <td style={{ padding: '16px', fontSize: '14px' }}>
                     <div><b>{u.followersCount?.toLocaleString() || 0}</b> followers</div>
                     <div style={{ color: '#888', marginTop: '4px' }}>{u.followingCount?.toLocaleString() || 0} following</div>
-                    </td>
+                  </td>
 
-                    {/* Cột 4: Role */}
-                    <td style={{ padding: '16px' }}>
-                        <span style={{ 
-                            background: u.role === 'admin' ? '#e8f0fe' : '#f1f2f6', 
-                            color: u.role === 'admin' ? '#1967d2' : '#57606f',
-                            padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' 
-                        }}>
-                            {u.role || 'user'}
-                        </span>
-                    </td>
+                  {/* Cột 4: Role */}
+                  <td style={{ padding: '16px' }}>
+                    <span style={{
+                      background: u.role === 'admin' ? '#e8f0fe' : '#f1f2f6',
+                      color: u.role === 'admin' ? '#1967d2' : '#57606f',
+                      padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase'
+                    }}>
+                      {u.role || 'user'}
+                    </span>
+                  </td>
 
-                    {/* Cột 5: Actions */}
-                    <td style={{ padding: '16px' }}>
+                  {/* Cột 5: Actions */}
+                  <td style={{ padding: '16px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                        <button style={{ 
-                            padding: '8px', background: '#f1f1f2', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#333' 
-                        }} title="Xem chi tiết">
-                            <FaEye />
-                        </button>
-                        
-                        <button 
-                            onClick={() => handleDeleteUser(u)}
-                            style={{ 
-                                padding: '8px', 
-                                background: 'white', 
-                                border: '1px solid #fe2c55', 
-                                borderRadius: '6px', 
-                                cursor: 'pointer', 
-                                color: '#fe2c55' 
-                            }} 
-                            title="Xóa tài khoản vĩnh viễn"
-                        >
-                            <FaTrash />
-                        </button>
+                      <button
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setShowTrackingModal(true);
+                        }}
+                        style={{
+                          padding: '8px', background: '#f1f1f2', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#333'
+                        }}
+                        title="Xem thông tin tracking"
+                      >
+                        <FaEye />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteUser(u)}
+                        style={{
+                          padding: '8px',
+                          background: 'white',
+                          border: '1px solid #fe2c55',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          color: '#fe2c55'
+                        }}
+                        title="Xóa tài khoản vĩnh viễn"
+                      >
+                        <FaTrash />
+                      </button>
                     </div>
-                    </td>
+                  </td>
                 </tr>
-                ))
+              ))
             )}
           </tbody>
         </table>
       </div>
+
+      {/* User Tracking Modal */}
+      {showTrackingModal && selectedUser && (
+        <UserTrackingModal
+          user={selectedUser}
+          onClose={() => {
+            setShowTrackingModal(false);
+            setSelectedUser(null);
+          }}
+        />
+      )}
     </div>
   );
 };

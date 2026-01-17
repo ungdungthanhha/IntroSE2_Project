@@ -30,14 +30,14 @@ export const loginAdmin = async (email: string, pass: string): Promise<User> => 
     // KIỂM TRA QUYỀN: Chỉ cho phép role là 'admin' (hoặc 'super_admin' nếu có)
     if (userData.role !== 'admin') {
       console.warn(`User ${user.email} cố gắng truy cập nhưng role là ${userData.role}`);
-      
+
       // Đăng xuất ngay lập tức để bảo mật
-      await signOut(auth); 
+      await signOut(auth);
       throw new Error("Bạn không có quyền truy cập trang Quản trị (Admin Only)!");
     }
 
     // 3. Bước 3: Đăng nhập thành công & Đúng quyền
-    // Lưu session để F5 không bị mất
+    // Lưu vào localStorage để F5 không bị mất, nhưng sẽ xóa khi đóng browser
     localStorage.setItem('isAdmin', 'true');
     localStorage.setItem('adminEmail', user.email || "");
 
@@ -46,7 +46,7 @@ export const loginAdmin = async (email: string, pass: string): Promise<User> => 
   } catch (error: any) {
     console.error("Lỗi đăng nhập:", error.message);
     // Ném lỗi ra ngoài để Login.tsx bắt được và hiển thị thông báo đỏ
-    throw error; 
+    throw error;
   }
 };
 
@@ -56,7 +56,7 @@ export const logoutAdmin = async (): Promise<void> => {
     await signOut(auth);
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('adminEmail');
-    window.location.href = "/login"; 
+    window.location.href = "/login";
   } catch (error) {
     console.error("Lỗi đăng xuất:", error);
   }
