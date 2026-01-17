@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Dimensions, Image,
   TouchableOpacity, Animated, Easing, Platform,
   ScrollView, TextInput, KeyboardAvoidingView, Pressable, AppState,
-  Alert, Keyboard, KeyboardEvent, ActivityIndicator, Modal, TouchableWithoutFeedback
+  Alert, Keyboard, KeyboardEvent, ActivityIndicator, Modal, TouchableWithoutFeedback, Share
 } from 'react-native';
 import Video from 'react-native-video';
 import SoundPlayer from 'react-native-sound';
@@ -422,6 +422,35 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     }
   };
 
+  const handleShare = async () => {
+    try {
+      // Tạo link video (có thể customize theo domain của bạn)
+      const videoLink = `https://tictoc.app/video/${video.id}`;
+      
+      const result = await Share.share({
+        message: `Check out this video by @${video.ownerName}: ${video.caption}\n\n${videoLink}`,
+        url: video.videoUrl, // Link trực tiếp đến video
+        title: `Video by @${video.ownerName}`,
+      }, {
+        // iOS only
+        subject: `Video by @${video.ownerName}`,
+        dialogTitle: 'Share this video',
+      });
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          console.log('Shared with activity type:', result.activityType);
+        } else {
+          console.log('Video shared successfully');
+        }
+      } else if (result.action === Share.dismissedAction) {
+        console.log('Share dismissed');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to share video');
+    }
+  };
+
   const reportReasons = [
     { value: ReportReason.SPAM, label: 'Spam or misleading' },
     { value: ReportReason.INAPPROPRIATE, label: 'Inappropriate content' },
@@ -526,7 +555,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.action}>
+          <TouchableOpacity style={styles.action} onPress={handleShare}>
             <Share2 size={35} color="#fff" />
             <Text style={styles.actionText}>Share</Text>
           </TouchableOpacity>
