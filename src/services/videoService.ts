@@ -642,3 +642,176 @@ export const trackVideoView = async (videoId: string): Promise<void> => {
     console.error('Error tracking video view:', error);
   }
 };
+
+/**
+ * 13. Lấy danh sách video từ Friends (mutual follows)
+ * Friends là những người mà cả hai đều follow nhau
+ */
+export const getVideosFromFriends = async (userId: string): Promise<Video[]> => {
+  try {
+    // 1. Lấy danh sách following của user
+    const followingSnapshot = await db
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('following')
+      .get();
+
+    // 2. Lấy danh sách followers của user
+    const followersSnapshot = await db
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('followers')
+      .get();
+
+    // 3. Tìm những user ID có trong cả hai danh sách (mutual follows = friends)
+    const followingIds = new Set(followingSnapshot.docs.map(doc => doc.id));
+    const friendIds: string[] = [];
+
+    followersSnapshot.docs.forEach(doc => {
+      if (followingIds.has(doc.id)) {
+        friendIds.push(doc.id);
+      }
+    });
+
+    if (friendIds.length === 0) {
+      return [];
+    }
+
+    // 4. Lấy videos từ những friends này
+    // Firestore có giới hạn 10 items cho 'in' query, nên ta cần chia nhỏ
+    const chunks: string[][] = [];
+    for (let i = 0; i < friendIds.length; i += 10) {
+      chunks.push(friendIds.slice(i, i + 10));
+    }
+
+    const allVideos: Video[] = [];
+
+    for (const chunk of chunks) {
+      const snapshot = await db
+        .collection(COLLECTIONS.VIDEOS)
+        .where('ownerUid', 'in', chunk)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const videos = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const createdAt = typeof data.createdAt === 'string'
+          ? new Date(data.createdAt).getTime()
+          : data.createdAt;
+
+        return {
+          id: doc.id,
+          ...data,
+          createdAt
+        } as Video;
+      });
+
+      allVideos.push(...videos);
+    }
+
+    // 5. Sắp xếp lại theo thời gian tạo
+    allVideos.sort((a, b) => {
+      const timeDiff = b.createdAt - a.createdAt;
+      if (timeDiff !== 0) return timeDiff;
+      return (a.ownerUid || '').localeCompare(b.ownerUid || '');
+    });
+
+    // 6. Đánh dấu liked và saved
+    const [likedSnapshot, savedSnapshot] = await Promise.all([
+      db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').get(),
+      db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').get()
+    ]);
+
+    const likedIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+    const savedIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
+    return allVideos.map(v => ({
+      ...v,
+      isLiked: likedIds.has(v.id),
+      isSaved: savedIds.has(v.id)
+    }));
+
+  } catch (error) {
+    console.error('Error getting videos from friends:', error);
+    return [];
+  }
+};
+
+/**
+ * 14. Lấy danh sách video từ Following
+ * Following là những người mà user đang theo dõi
+ */
+export const getVideosFromFollowing = async (userId: string): Promise<Video[]> => {
+  try {
+    // 1. Lấy danh sách following của user
+    const followingSnapshot = await db
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('following')
+      .get();
+
+    const followingIds = followingSnapshot.docs.map(doc => doc.id);
+
+    if (followingIds.length === 0) {
+      return [];
+    }
+
+    // 2. Lấy videos từ những người mình follow
+    // Firestore có giới hạn 10 items cho 'in' query, nên ta cần chia nhỏ
+    const chunks: string[][] = [];
+    for (let i = 0; i < followingIds.length; i += 10) {
+      chunks.push(followingIds.slice(i, i + 10));
+    }
+
+    const allVideos: Video[] = [];
+
+    for (const chunk of chunks) {
+      const snapshot = await db
+        .collection(COLLECTIONS.VIDEOS)
+        .where('ownerUid', 'in', chunk)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const videos = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const createdAt = typeof data.createdAt === 'string'
+          ? new Date(data.createdAt).getTime()
+          : data.createdAt;
+
+        return {
+          id: doc.id,
+          ...data,
+          createdAt
+        } as Video;
+      });
+
+      allVideos.push(...videos);
+    }
+
+    // 3. Sắp xếp lại theo thời gian tạo
+    allVideos.sort((a, b) => {
+      const timeDiff = b.createdAt - a.createdAt;
+      if (timeDiff !== 0) return timeDiff;
+      return (a.ownerUid || '').localeCompare(b.ownerUid || '');
+    });
+
+    // 4. Đánh dấu liked và saved
+    const [likedSnapshot, savedSnapshot] = await Promise.all([
+      db.collection(COLLECTIONS.USERS).doc(userId).collection('likedVideos').get(),
+      db.collection(COLLECTIONS.USERS).doc(userId).collection('savedVideos').get()
+    ]);
+
+    const likedIds = new Set(likedSnapshot.docs.map(doc => doc.id));
+    const savedIds = new Set(savedSnapshot.docs.map(doc => doc.id));
+
+    return allVideos.map(v => ({
+      ...v,
+      isLiked: likedIds.has(v.id),
+      isSaved: savedIds.has(v.id)
+    }));
+
+  } catch (error) {
+    console.error('Error getting videos from following:', error);
+    return [];
+  }
+};

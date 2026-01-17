@@ -101,6 +101,22 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     fetchCurrentUserInfo();
   }, [currentUserId]);
 
+  // Kiểm tra trạng thái follow khi component load
+  useEffect(() => {
+    const checkFollowStatus = async () => {
+      if (currentUserId && video.ownerUid && currentUserId !== video.ownerUid) {
+        try {
+          const following = await userService.isFollowing(currentUserId, video.ownerUid);
+          setIsFollowing(following);
+        } catch (error) {
+          console.error('Error checking follow status:', error);
+        }
+      }
+    };
+
+    checkFollowStatus();
+  }, [currentUserId, video.ownerUid]);
+
   // Fetch comments when modal opens
   useEffect(() => {
     if (showComments) {
@@ -352,6 +368,36 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
     }
   };
 
+  const handleFollowToggle = async () => {
+    if (!currentUserId || !video.ownerUid) return;
+    
+    // Không cho phép follow chính mình
+    if (currentUserId === video.ownerUid) return;
+
+    try {
+      if (isFollowing) {
+        // Unfollow
+        await userService.unfollowUser(currentUserId, video.ownerUid);
+        setIsFollowing(false);
+      } else {
+        // Follow
+        await userService.followUser(currentUserId, video.ownerUid);
+        setIsFollowing(true);
+      }
+
+      // Fetch updated user data from Firebase để cập nhật follower count
+      const updatedOwner = await userService.getUserById(video.ownerUid);
+      if (updatedOwner) {
+        console.log('Updated video owner after follow toggle:', updatedOwner);
+      }
+    } catch (error: any) {
+      console.error('Error toggling follow:', error);
+      Alert.alert('Error', error.message || 'Failed to update follow status');
+      // Revert trên UI nếu có lỗi
+      setIsFollowing(!isFollowing);
+    }
+  };
+
   const handleReportSubmit = async () => {
     if (!currentUserId || !selectedReason) {
       Alert.alert('Error', 'Please select a reason for reporting');
@@ -459,12 +505,6 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
             } as User)}
           >
             <Image source={{ uri: video.ownerAvatar }} style={styles.avatar} />
-            <Pressable
-              onPress={(e) => { e.stopPropagation(); setIsFollowing(!isFollowing); }}
-              style={[styles.plusIcon, isFollowing && { backgroundColor: '#fff' }]}
-            >
-              <Plus size={12} color={isFollowing ? "#fe2c55" : "#fff"} strokeWidth={4} />
-            </Pressable>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.action} onPress={handleLike}>

@@ -173,11 +173,32 @@ const AppContent = () => {
   const fetchVideos = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     try {
-      const allVideos = await videoService.getAllVideos(currentUser?.uid);
+      let allVideos: VideoType[] = [];
+      
+      // Lấy videos theo từng loại feed
+      if (feedType === 'friends') {
+        // Lấy videos từ Friends (mutual follows)
+        if (currentUser?.uid) {
+          allVideos = await videoService.getVideosFromFriends(currentUser.uid);
+        }
+      } else if (feedType === 'following') {
+        // Lấy videos từ Following
+        if (currentUser?.uid) {
+          allVideos = await videoService.getVideosFromFollowing(currentUser.uid);
+        }
+      } else {
+        // For You - tất cả videos
+        allVideos = await videoService.getAllVideos(currentUser?.uid);
+      }
+      
       if (allVideos.length > 0) {
         setVideos(allVideos);
-      } else { setVideos(MOCK_VIDEOS); }
-    } catch (e) { setVideos(MOCK_VIDEOS); }
+      } else { 
+        setVideos(MOCK_VIDEOS); 
+      }
+    } catch (e) { 
+      setVideos(MOCK_VIDEOS); 
+    }
     finally {
       if (showLoading) setIsLoading(false);
     }
@@ -193,6 +214,13 @@ const AppContent = () => {
   useEffect(() => {
     fetchVideos();
   }, [currentUser?.uid]);
+
+  // Fetch videos khi feedType thay đổi
+  useEffect(() => {
+    if (currentUser?.uid) {
+      fetchVideos();
+    }
+  }, [feedType]);
 
   // Subscribe to notifications for badge
   useEffect(() => {
