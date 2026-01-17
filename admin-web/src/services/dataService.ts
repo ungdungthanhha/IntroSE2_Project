@@ -165,3 +165,123 @@ export const updateReportStatus = async (reportId: string, newStatus: 'resolved'
     throw error;
   }
 };
+
+// ==========================================
+// 4. QUẢN LÝ TRACKING NGƯỜI DÙNG
+// ==========================================
+
+export const getUserTracking = async (userId: string): Promise<any> => {
+  try {
+    const userRef = doc(db, COLLECTIONS.USERS, userId);
+
+    // 1. Lấy Liked Videos
+    const likedVideosRef = collection(userRef, 'likedVideos');
+    const likedSnapshot = await getDocs(likedVideosRef);
+
+    const likedVideoIds = likedSnapshot.docs.map(d => ({
+      videoId: d.id,
+      likedAt: d.data().createdAt || d.data().timestamp || 0
+    }));
+
+    // Lấy thông tin chi tiết của các video đã like
+    const likedVideosData = await Promise.all(
+      likedVideoIds.map(async ({ videoId, likedAt }) => {
+        try {
+          const videoDoc = await getDoc(doc(db, COLLECTIONS.VIDEOS, videoId));
+          if (videoDoc.exists()) {
+            return {
+              id: videoDoc.id,
+              ...videoDoc.data(),
+              likedAt
+            } as any;
+          }
+          return null;
+        } catch (e) {
+          console.warn(`Video ${videoId} không tồn tại hoặc đã bị xóa`);
+          return null;
+        }
+      })
+    );
+
+    const validLikedVideos = likedVideosData.filter(v => v !== null);
+
+    // 2. Lấy Saved Videos
+    const savedVideosRef = collection(userRef, 'savedVideos');
+    const savedSnapshot = await getDocs(savedVideosRef);
+
+    const savedVideoIds = savedSnapshot.docs.map(d => ({
+      videoId: d.id,
+      savedAt: d.data().createdAt || d.data().timestamp || 0
+    }));
+
+    // Lấy thông tin chi tiết của các video đã save
+    const savedVideosData = await Promise.all(
+      savedVideoIds.map(async ({ videoId, savedAt }) => {
+        try {
+          const videoDoc = await getDoc(doc(db, COLLECTIONS.VIDEOS, videoId));
+          if (videoDoc.exists()) {
+            return {
+              id: videoDoc.id,
+              ...videoDoc.data(),
+              savedAt
+            } as any;
+          }
+          return null;
+        } catch (e) {
+          console.warn(`Video ${videoId} không tồn tại hoặc đã bị xóa`);
+          return null;
+        }
+      })
+    );
+
+    const validSavedVideos = savedVideosData.filter(v => v !== null);
+
+    // 3. Lấy Comments của user
+    // Tìm tất cả comments trong tất cả videos
+    const videosSnapshot = await getDocs(collection(db, COLLECTIONS.VIDEOS));
+    const allComments: any[] = [];
+
+    await Promise.all(
+      videosSnapshot.docs.map(async (videoDoc) => {
+        const commentsRef = collection(videoDoc.ref, 'comments');
+        const commentsSnapshot = await getDocs(commentsRef);
+
+        commentsSnapshot.docs.forEach(commentDoc => {
+          const commentData = commentDoc.data();
+          if (commentData.userUid === userId || commentData.userId === userId) {
+            allComments.push({
+              id: commentDoc.id,
+              videoId: videoDoc.id,
+              ...commentData,
+              videoData: {
+                id: videoDoc.id,
+                ...videoDoc.data()
+              }
+            });
+          }
+        });
+      })
+    );
+
+    // Sắp xếp comments theo thời gian mới nhất
+    allComments.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    return {
+      likedVideos: {
+        count: validLikedVideos.length,
+        videos: validLikedVideos
+      },
+      savedVideos: {
+        count: validSavedVideos.length,
+        videos: validSavedVideos
+      },
+      comments: {
+        count: allComments.length,
+        comments: allComments
+      }
+    };
+  } catch (error) {
+    console.error("Lỗi lấy tracking data:", error);
+    throw error;
+  }
+};

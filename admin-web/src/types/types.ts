@@ -89,3 +89,29 @@ export interface Report {
   timestamp?: number;       // Mobile app dùng timestamp
   createdAt?: number;       // Admin-web dùng createdAt (fallback)
 }
+
+// --- ADMIN WEB TRACKING TYPES ---
+
+export interface VideoWithTimestamp extends Video {
+  savedAt?: number;
+  likedAt?: number;
+}
+
+export interface CommentWithVideo extends Comment {
+  videoData?: Video;
+}
+
+export interface UserTracking {
+  likedVideos: {
+    count: number;
+    videos: VideoWithTimestamp[];
+  };
+  savedVideos: {
+    count: number;
+    videos: VideoWithTimestamp[];
+  };
+  comments: {
+    count: number;
+    comments: CommentWithVideo[];
+  };
+}
