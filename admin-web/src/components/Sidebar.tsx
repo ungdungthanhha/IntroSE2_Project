@@ -1,7 +1,7 @@
 // src/components/Sidebar.tsx
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom'; 
-import { FaTiktok, FaVideo, FaUsers, FaFlag, FaSignOutAlt } from 'react-icons/fa';
+import { Link, useLocation } from 'react-router-dom';
+import { FaVideo, FaUsers, FaFlag, FaSignOutAlt } from 'react-icons/fa';
 import { logoutAdmin } from '../services/authService'; // Import hàm đăng xuất chuẩn
 
 const Sidebar: React.FC = () => {
@@ -20,7 +20,7 @@ const Sidebar: React.FC = () => {
     // Kiểm tra xem đường dẫn hiện tại có bắt đầu bằng path này không
     // (Để khi vào /videos/detail vẫn sáng đèn tab Video)
     const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
-    
+
     return {
       display: 'flex',
       alignItems: 'center',
@@ -39,29 +39,28 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside style={{ 
-      width: '260px', 
-      background: '#ffffff', 
-      height: '100vh', 
+    <aside style={{
+      width: '260px',
+      background: '#ffffff',
+      height: '100vh',
       borderRight: '1px solid #e3e3e4',
-      display: 'flex', 
+      display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',
       paddingTop: '20px'
     }}>
       {/* --- LOGO --- */}
-      <div style={{ 
-        display: 'flex', alignItems: 'center', gap: '8px', 
-        padding: '0 24px 30px 24px', 
-        fontSize: '22px', fontWeight: '800' 
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '0 24px 30px 24px',
+        fontSize: '26px', fontWeight: '800'
       }}>
-        <FaTiktok size={26} color="#000" />
-        <span>TikToc <span style={{ color: '#fe2c55' }}>Admin</span></span>
+        <span>TicToc <span style={{ color: '#fe2c55' }}>Admin</span></span>
       </div>
-      
+
       {/* --- MENU --- */}
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-        
+
         {/* 1. Tab Video */}
         <Link to="/videos" style={getLinkStyle('/videos')}>
           <FaVideo size={18} />
@@ -83,13 +82,13 @@ const Sidebar: React.FC = () => {
 
       {/* --- LOGOUT BUTTON --- */}
       <div style={{ padding: '20px' }}>
-        <button 
+        <button
           onClick={handleLogout}
-          style={{ 
+          style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-            width: '100%', padding: '12px', 
-            background: '#f1f1f2', color: '#161823', 
-            border: 'none', borderRadius: '8px', 
+            width: '100%', padding: '12px',
+            background: '#f1f1f2', color: '#161823',
+            border: 'none', borderRadius: '8px',
             fontWeight: '600', cursor: 'pointer', transition: '0.3s'
           }}
           onMouseOver={(e) => e.currentTarget.style.background = '#e4e4e6'}
