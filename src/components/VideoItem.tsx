@@ -78,6 +78,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   const [reportDetails, setReportDetails] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [currentUserInfo, setCurrentUserInfo] = useState({ uid: '', username: '', avatarUrl: '' });
+  const previousProgressRef = useRef(0);
 
   // Fetch current user info on component mount
   useEffect(() => {
@@ -468,9 +469,21 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
   // 3. FIX LỖI CHIA CHO 0 & CẬP NHẬT TIẾN TRÌNH
   const handleProgress = (data: any) => {
     if (isMounted.current && data?.seekableDuration > 0) {
-      const calculation = data.currentTime / data.seekableDuration;
-      if (isFinite(calculation)) {
-        setProgress(calculation);
+      const currentProgress = data.currentTime / data.seekableDuration;
+      if (isFinite(currentProgress)) {
+        // Detect video loop: if progress went from >0.9 to <0.1, restart sound
+        if (currentProgress < 0.1 && previousProgressRef.current > 0.9) {
+          if (soundRef.current && video.soundAudioUrl) {
+            try {
+              soundRef.current.stop();
+              soundRef.current.play();
+            } catch (e) {
+              console.log('Error restarting sound on video loop:', e);
+            }
+          }
+        }
+        previousProgressRef.current = currentProgress;
+        setProgress(currentProgress);
       }
     }
   };
