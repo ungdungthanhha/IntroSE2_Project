@@ -1,7 +1,6 @@
 // src/pages/Login.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaTiktok } from 'react-icons/fa';
 import { loginAdmin } from '../services/authService';
 
 const Login: React.FC = () => {
@@ -19,10 +18,10 @@ const Login: React.FC = () => {
     try {
       // Gọi service đăng nhập
       await loginAdmin(email, password);
-      
+
       // Đăng nhập thành công -> Chuyển thẳng vào trang Videos
       navigate('/videos');
-      
+
     } catch (err: any) {
       console.error(err);
       // Xử lý thông báo lỗi chi tiết
@@ -76,9 +75,8 @@ const Login: React.FC = () => {
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '30px' }}>
-          <FaTiktok size={32} color="#000" />
-          <span style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>
-            TikToc <span style={{ color: '#fe2c55' }}>Admin</span>
+          <span style={{ fontSize: '32px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+            TicToc <span style={{ color: '#fe2c55' }}>Admin</span>
           </span>
         </div>
 
@@ -92,8 +90,8 @@ const Login: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px', color: '#161823' }}>
               Email
             </label>
-            <input 
-              type="email" 
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -112,8 +110,8 @@ const Login: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px', color: '#161823' }}>
               Mật khẩu
             </label>
-            <input 
-              type="password" 
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -129,12 +127,12 @@ const Login: React.FC = () => {
 
           {/* Thông báo lỗi */}
           {error && (
-            <div style={{ 
-              color: '#ea2845', 
-              fontSize: '13px', 
-              margin: '-10px 0 20px', 
-              background: 'rgba(234, 40, 69, 0.05)', 
-              padding: '10px', 
+            <div style={{
+              color: '#ea2845',
+              fontSize: '13px',
+              margin: '-10px 0 20px',
+              background: 'rgba(234, 40, 69, 0.05)',
+              padding: '10px',
               borderRadius: '4px',
               textAlign: 'left',
               display: 'flex', alignItems: 'center', gap: '6px'
@@ -144,8 +142,8 @@ const Login: React.FC = () => {
           )}
 
           {/* Button Submit */}
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
             style={{
               width: '100%',

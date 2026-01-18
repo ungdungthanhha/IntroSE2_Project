@@ -170,6 +170,72 @@ export const updateReportStatus = async (reportId: string, newStatus: 'resolved'
 // 4. QUẢN LÝ TRACKING NGƯỜI DÙNG
 // ==========================================
 
+// Lấy danh sách followers của một user
+export const getFollowers = async (userId: string): Promise<User[]> => {
+  try {
+    const userRef = doc(db, COLLECTIONS.USERS, userId);
+    const followersRef = collection(userRef, 'followers');
+    const followersSnapshot = await getDocs(followersRef);
+
+    const followers: User[] = [];
+
+    for (const followerDoc of followersSnapshot.docs) {
+      try {
+        const followerData = followerDoc.data();
+        const followerUserId = followerData.userId || followerDoc.id;
+
+        const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, followerUserId));
+        if (userDoc.exists()) {
+          followers.push({
+            uid: userDoc.id,
+            ...userDoc.data()
+          } as User);
+        }
+      } catch (e) {
+        console.warn(`Follower user ${followerDoc.id} không tồn tại`);
+      }
+    }
+
+    return followers;
+  } catch (error) {
+    console.error("Lỗi lấy followers:", error);
+    return [];
+  }
+};
+
+// Lấy danh sách following của một user
+export const getFollowing = async (userId: string): Promise<User[]> => {
+  try {
+    const userRef = doc(db, COLLECTIONS.USERS, userId);
+    const followingRef = collection(userRef, 'following');
+    const followingSnapshot = await getDocs(followingRef);
+
+    const following: User[] = [];
+
+    for (const followingDoc of followingSnapshot.docs) {
+      try {
+        const followingData = followingDoc.data();
+        const followingUserId = followingData.userId || followingDoc.id;
+
+        const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, followingUserId));
+        if (userDoc.exists()) {
+          following.push({
+            uid: userDoc.id,
+            ...userDoc.data()
+          } as User);
+        }
+      } catch (e) {
+        console.warn(`Following user ${followingDoc.id} không tồn tại`);
+      }
+    }
+
+    return following;
+  } catch (error) {
+    console.error("Lỗi lấy following:", error);
+    return [];
+  }
+};
+
 export const getUserTracking = async (userId: string): Promise<any> => {
   try {
     const userRef = doc(db, COLLECTIONS.USERS, userId);
@@ -266,6 +332,12 @@ export const getUserTracking = async (userId: string): Promise<any> => {
     // Sắp xếp comments theo thời gian mới nhất
     allComments.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
+    // 4. Lấy Followers
+    const followers = await getFollowers(userId);
+
+    // 5. Lấy Following
+    const following = await getFollowing(userId);
+
     return {
       likedVideos: {
         count: validLikedVideos.length,
@@ -278,6 +350,14 @@ export const getUserTracking = async (userId: string): Promise<any> => {
       comments: {
         count: allComments.length,
         comments: allComments
+      },
+      followers: {
+        count: followers.length,
+        users: followers
+      },
+      following: {
+        count: following.length,
+        users: following
       }
     };
   } catch (error) {

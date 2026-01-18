@@ -114,4 +114,12 @@ export interface UserTracking {
     count: number;
     comments: CommentWithVideo[];
   };
+  followers: {
+    count: number;
+    users: User[];
+  };
+  following: {
+    count: number;
+    users: User[];
+  };
 }

@@ -1,6 +1,6 @@
 // src/components/UserTrackingModal.tsx
 import React, { useEffect, useState } from 'react';
-import { FaTimes, FaHeart, FaBookmark, FaComment, FaSpinner } from 'react-icons/fa';
+import { FaTimes, FaHeart, FaBookmark, FaComment, FaSpinner, FaUserFriends } from 'react-icons/fa';
 import type { User } from '../types/types';
 import { getUserTracking } from '../services/dataService';
 
@@ -12,7 +12,7 @@ interface UserTrackingModalProps {
 const UserTrackingModal: React.FC<UserTrackingModalProps> = ({ user, onClose }) => {
     const [trackingData, setTrackingData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'likes' | 'saves' | 'comments'>('likes');
+    const [activeTab, setActiveTab] = useState<'likes' | 'saves' | 'comments' | 'followers' | 'following'>('likes');
 
     useEffect(() => {
         const fetchTracking = async () => {
@@ -45,6 +45,8 @@ const UserTrackingModal: React.FC<UserTrackingModalProps> = ({ user, onClose }) 
         { id: 'likes', label: 'Liked Videos', icon: FaHeart, count: trackingData?.likedVideos?.count || 0 },
         { id: 'saves', label: 'Saved Videos', icon: FaBookmark, count: trackingData?.savedVideos?.count || 0 },
         { id: 'comments', label: 'Comments', icon: FaComment, count: trackingData?.comments?.count || 0 },
+        { id: 'followers', label: 'Followers', icon: FaUserFriends, count: trackingData?.followers?.count || 0 },
+        { id: 'following', label: 'Following', icon: FaUserFriends, count: trackingData?.following?.count || 0 },
     ];
 
     return (
@@ -354,6 +356,120 @@ const UserTrackingModal: React.FC<UserTrackingModalProps> = ({ user, onClose }) 
                                         <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
                                             <FaComment size={48} color="#ddd" style={{ marginBottom: '16px' }} />
                                             <p>Người dùng chưa comment video nào</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Followers */}
+                            {activeTab === 'followers' && (
+                                <div>
+                                    {trackingData?.followers?.users?.length > 0 ? (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+                                            {trackingData.followers.users.map((follower: User) => (
+                                                <div key={follower.uid} style={{
+                                                    border: '1px solid #eee',
+                                                    borderRadius: '12px',
+                                                    padding: '16px',
+                                                    display: 'flex',
+                                                    gap: '12px',
+                                                    alignItems: 'center',
+                                                    background: '#fafafa',
+                                                    transition: 'all 0.2s',
+                                                    cursor: 'pointer'
+                                                }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                                                        e.currentTarget.style.background = '#f5f5f5';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.transform = 'translateY(0)';
+                                                        e.currentTarget.style.boxShadow = 'none';
+                                                        e.currentTarget.style.background = '#fafafa';
+                                                    }}
+                                                >
+                                                    <img
+                                                        src={follower.avatarUrl || `https://ui-avatars.com/api/?name=${follower.username}&background=random`}
+                                                        alt={follower.username}
+                                                        style={{ width: '56px', height: '56px', borderRadius: '50%', border: '2px solid #eee' }}
+                                                    />
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: '15px', fontWeight: '600', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            @{follower.username}
+                                                        </div>
+                                                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {follower.email}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: '#888', display: 'flex', gap: '12px' }}>
+                                                            <span>👥 {follower.followersCount || 0} followers</span>
+                                                            <span>➡️ {follower.followingCount || 0} following</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
+                                            <FaUserFriends size={48} color="#ddd" style={{ marginBottom: '16px' }} />
+                                            <p>Người dùng chưa có followers</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Following */}
+                            {activeTab === 'following' && (
+                                <div>
+                                    {trackingData?.following?.users?.length > 0 ? (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+                                            {trackingData.following.users.map((followingUser: User) => (
+                                                <div key={followingUser.uid} style={{
+                                                    border: '1px solid #eee',
+                                                    borderRadius: '12px',
+                                                    padding: '16px',
+                                                    display: 'flex',
+                                                    gap: '12px',
+                                                    alignItems: 'center',
+                                                    background: '#fafafa',
+                                                    transition: 'all 0.2s',
+                                                    cursor: 'pointer'
+                                                }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                                                        e.currentTarget.style.background = '#f5f5f5';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.transform = 'translateY(0)';
+                                                        e.currentTarget.style.boxShadow = 'none';
+                                                        e.currentTarget.style.background = '#fafafa';
+                                                    }}
+                                                >
+                                                    <img
+                                                        src={followingUser.avatarUrl || `https://ui-avatars.com/api/?name=${followingUser.username}&background=random`}
+                                                        alt={followingUser.username}
+                                                        style={{ width: '56px', height: '56px', borderRadius: '50%', border: '2px solid #eee' }}
+                                                    />
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: '15px', fontWeight: '600', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            @{followingUser.username}
+                                                        </div>
+                                                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {followingUser.email}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: '#888', display: 'flex', gap: '12px' }}>
+                                                            <span>👥 {followingUser.followersCount || 0} followers</span>
+                                                            <span>➡️ {followingUser.followingCount || 0} following</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
+                                            <FaUserFriends size={48} color="#ddd" style={{ marginBottom: '16px' }} />
+                                            <p>Người dùng chưa follow ai</p>
                                         </div>
                                     )}
                                 </div>
