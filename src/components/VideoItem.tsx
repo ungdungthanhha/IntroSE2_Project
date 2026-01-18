@@ -472,7 +472,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
       const currentProgress = data.currentTime / data.seekableDuration;
       if (isFinite(currentProgress)) {
         // Detect video loop: if progress went from >0.9 to <0.1, restart sound
-        if (currentProgress < 0.1 && previousProgressRef.current > 0.9) {
+        if (currentProgress < previousProgressRef.current && previousProgressRef.current > 0.5) {
           if (soundRef.current && video.soundAudioUrl) {
             try {
               soundRef.current.stop();
@@ -507,7 +507,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
           playWhenInactive={false}
           onProgress={handleProgress}
 
-          progressUpdateInterval={1000}
+          progressUpdateInterval={250}
           bufferConfig={{
             minBufferMs: 15000,
             maxBufferMs: 30000,
@@ -771,6 +771,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, isActive, shouldLoad, onVi
                 <TextInput
                   style={styles.input}
                   placeholder="Add comment..."
+                  placeholderTextColor="#555"
                   value={commentText}
                   onChangeText={setCommentText}
                 />
@@ -838,7 +839,7 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11, color: '#999' },
   commentReply: { fontSize: 11, fontWeight: 'bold', color: '#666' },
   inputContainer: { flexDirection: 'row', padding: 10, borderTopWidth: 0.5, borderColor: '#eee', alignItems: 'center', gap: 10 },
-  input: { flex: 1, height: 36, backgroundColor: '#f0f0f0', borderRadius: 18, paddingHorizontal: 12 },
+  input: { flex: 1, height: 36, backgroundColor: '#f0f0f0', borderRadius: 18, paddingHorizontal: 12, color: '#555' },
 
   // Report Modal
   reportModal: { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '75%', backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, zIndex: 100 },

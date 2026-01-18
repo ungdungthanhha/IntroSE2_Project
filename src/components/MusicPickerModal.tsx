@@ -160,6 +160,7 @@ const MusicPickerModal: React.FC<MusicPickerModalProps> = ({ visible, onClose, o
                 <TextInput
                   style={styles.input}
                   placeholder="Find music on iTunes"
+                  placeholderTextColor="#555"
                   value={query}
                   onChangeText={(text) => {
                     setQuery(text);
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   tabText: { color: 'gray', fontWeight: '600' },
   activeTabText: { color: '#000' },
   searchBox: { flexDirection: 'row', backgroundColor: '#f1f1f2', margin: 16, padding: 10, borderRadius: 8, alignItems: 'center', gap: 10 },
-  input: { flex: 1, fontSize: 16, padding: 0 },
+  input: { flex: 1, fontSize: 16, padding: 0, color: '#555' },
   itemContainer: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderColor: '#f9f9f9', alignItems: 'center' },
   thumbWrapper: { width: 50, height: 50, marginRight: 12 },
   thumb: { width: '100%', height: '100%', borderRadius: 4 },
